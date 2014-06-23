@@ -178,8 +178,9 @@ spgbeginscan(PG_FUNCTION_ARGS)
 {
 	Relation	rel = (Relation) PG_GETARG_POINTER(0);
 	int			keysz = PG_GETARG_INT32(1);
+	int norderbys = PG_GETARG_INT32(2);
+	int knearest = PG_GETARG_INT32(3);
 
-	/* ScanKey			scankey = (ScanKey) PG_GETARG_POINTER(2); */
 	IndexScanDesc scan;
 	SpGistScanOpaque so;
 
@@ -191,6 +192,8 @@ spgbeginscan(PG_FUNCTION_ARGS)
 	else
 		so->keyData = NULL;
 	initSpGistState(&so->state, scan->indexRelation);
+	scan->numberOfOrderBys = norderbys;
+	so->nnCount = knearest;
 	so->tempCxt = AllocSetContextCreate(CurrentMemoryContext,
 										"SP-GiST search temporary context",
 										ALLOCSET_DEFAULT_MINSIZE,
@@ -202,6 +205,12 @@ spgbeginscan(PG_FUNCTION_ARGS)
 
 	scan->opaque = so;
 
+	so->queueCxt = AllocSetContextCreate(CurrentMemoryContext,
+			"SP-GiST queue context",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
 	PG_RETURN_POINTER(scan);
 }
 
@@ -211,6 +220,8 @@ spgrescan(PG_FUNCTION_ARGS)
 	IndexScanDesc scan = (IndexScanDesc) PG_GETARG_POINTER(0);
 	SpGistScanOpaque so = (SpGistScanOpaque) scan->opaque;
 	ScanKey		scankey = (ScanKey) PG_GETARG_POINTER(1);
+	int norderbys = PG_GETARG_INT32(2);
+	int knearest = PG_GETARG_INT32(3);
 
 	/* copy scankeys into local storage */
 	if (scankey && scan->numberOfKeys > 0)
@@ -224,6 +235,20 @@ spgrescan(PG_FUNCTION_ARGS)
 
 	/* set up starting stack entries */
 	resetSpGistScanOpaque(so);
+
+	/* TODO: Complete initialization of order distances */
+	scan->numberOfOrderBys = norderbys;
+	so->nnCount = knearest;
+
+	MemoryContext oldCxt;
+	oldCxt = MemoryContextSwitchTo(so->queueCxt);
+	so->queue = rb_create(SPGISTHDRSZ + sizeof (double) * scan->numberOfOrderBys,
+			SpGistSearchTreeItemComparator,
+			SpGistSearchTreeItemCombiner,
+			SpGistSearchTreeItemAllocator,
+			SpGistSearchTreeItemDeleter,
+			scan);
+	MemoryContextSwitchTo(oldCxt);
 
 	PG_RETURN_VOID();
 }
@@ -258,9 +283,11 @@ spgrestrpos(PG_FUNCTION_ARGS)
  *
  * *leafValue is set to the reconstructed datum, if provided
  * *recheck is set true if any of the operators are lossy
+ *
+ * If scan keys are satisfied, fill up so->distances in accordance to so->
  */
 static bool
-spgLeafTest(Relation index, SpGistScanOpaque so,
+spgLeafTest(Relation index, IndexScanDesc scan,
 			SpGistLeafTuple leafTuple, bool isnull,
 			int level, Datum reconstructedValue,
 			Datum *leafValue, bool *recheck)
@@ -271,6 +298,7 @@ spgLeafTest(Relation index, SpGistScanOpaque so,
 	spgLeafConsistentOut out;
 	FmgrInfo   *procinfo;
 	MemoryContext oldCtx;
+	SpGistScanOpaque so = scan->opaque;
 
 	if (isnull)
 	{
@@ -305,9 +333,161 @@ spgLeafTest(Relation index, SpGistScanOpaque so,
 	*leafValue = out.leafValue;
 	*recheck = out.recheck;
 
+	if (!result) return false;
+
+	/* TODO: Fix distance computation */
+	ScanKey key = scan->orderByData;
+	int keySize = scan->numberOfOrderBys;
+	double *distance_p = so->distances;
+	while (keySize > 0) {
+		Datum datum;
+		bool isNull;
+
+		datum = index_getattr(tuple,
+				key->sk_attno,
+				giststate->tupdesc,
+				&isNull);
+
+		if ((key->sk_flags & SK_ISNULL) || isNull) {
+			/* Assume distance computes as null and sorts to the end */
+			*distance_p = get_float8_infinity();
+		} else {
+			Datum dist;
+			GISTENTRY de;
+
+			gistdentryinit(giststate, key->sk_attno - 1, &de,
+					datum, r, page, offset,
+					FALSE, isNull);
+
+			/*
+			 * Call the Distance function to evaluate the distance.  The
+			 * arguments are the index datum (as a GISTENTRY*), the comparison
+			 * datum, and the ordering operator's strategy number and subtype
+			 * from pg_amop.
+			 */
+			dist = FunctionCall4Coll(&key->sk_func,
+					key->sk_collation,
+					PointerGetDatum(&de),
+					key->sk_argument,
+					Int32GetDatum(key->sk_strategy),
+					ObjectIdGetDatum(key->sk_subtype));
+
+			*distance_p = DatumGetFloat8(dist);
+		}
+
+		key++;
+		distance_p++;
+		keySize--;
+	}
+
 	MemoryContextSwitchTo(oldCtx);
 
 	return result;
+}
+
+typedef struct SpGistSearchItem {
+	struct SpGistSearchItem *next; /* list link */
+	ItemPointerData heapPtr;
+	Datum leafValue;
+
+} SpGistSearchItem;
+
+typedef struct SpGistSearchTreeItem {
+	SpGistSearchItem *head; /* first chain member */
+	double distances[1];
+} SpGistSearchTreeItem;
+
+#define SPGISTHDRSZ offsetof(GISTSearchTreeItem, distances)
+
+static int
+SpGistSearchTreeItemComparator(const RBNode *a, const RBNode *b, void *arg) {
+	const SpGistSearchTreeItem *sa = (const SpGistSearchTreeItem *) a;
+	const SpGistSearchTreeItem *sb = (const SpGistSearchTreeItem *) b;
+	IndexScanDesc scan = (IndexScanDesc) arg;
+	int i;
+
+	/* Order according to distance comparison so that the farthest element is the leftmost */
+	for (i = 0; i < scan->numberOfOrderBys; i++) {
+		if (sa->distances[i] != sb->distances[i])
+			return (sa->distances[i] > sb->distances[i]) ? -1 : 1;
+	}
+
+	return 0;
+}
+
+static void
+SpGistSearchTreeItemCombiner(RBNode *existing, const RBNode *newrb, void *arg) {
+	SpGistSearchTreeItem *scurrent = (SpGistSearchTreeItem *) existing;
+	const SpGistSearchTreeItem *snew = (const SpGistSearchTreeItem *) newrb;
+	SpGistSearchItem *newitem = snew->head;
+
+	/* snew should have just one item in its chain */
+	Assert(newitem && newitem->next == NULL);
+
+	newitem->next = scurrent->head;
+	scurrent->head = newitem;
+}
+
+static RBNode *
+SpGistSearchTreeItemAllocator(void *arg) {
+	IndexScanDesc scan = (IndexScanDesc) arg;
+
+	return palloc(SPGISTHDRSZ + sizeof (double) * scan->numberOfOrderBys);
+}
+
+static void
+SpGistSearchTreeItemDeleter(RBNode *rb, void *arg) {
+	pfree(rb);
+}
+
+/*
+ * Create new item to insert in rb-tree
+ * Invoked in heap context
+ */
+static void makeTreeItem(ItemPointerData heapPtr, Datum leafValue,
+		IndexScanDesc scan, SpGistSearchTreeItem *tmpItem) {
+	SpGistSearchItem *item;
+	SpGistScanOpaque so = (SpGistScanOpaque) scan->opaque;
+	item = palloc(sizeof (SpGistSearchItem));
+	item->next = NULL;
+	item->heapPtr = heapPtr;
+	item->leafValue = leafValue;
+
+	tmpItem->head = item;
+	memcpy(tmpItem->distances, so->distances,
+			sizeof (double) * scan->numberOfOrderBys);
+}
+
+static void updateQueue(IndexScanDesc scan, ItemPointer heapPtr,
+		int *foundNNearest, Datum leafValue, bool isnull) {
+	if (isnull) return;
+	bool isNew;
+	SpGistScanOpaque so = (SpGistScanOpaque) scan->opaque;
+	if (*foundNNearest < so->nnCount) {
+		/* We search for K nearest and still have not filled the K-bucket up
+			 => Add the item to the nearestQueue */
+		makeTreeItem(heapPtr, leafValue, scan, so->tmpTreeItem);
+		(void) rb_insert(so->queue, (RBNode *) so->tmpTreeItem, &isNew);
+		++(*foundNNearest);
+	}
+	else {
+		/* We already have seen at least K items
+		   If current one is better -> remove the worst and add current to nearestQueue */
+		SpGistSearchTreeItem currentWorst = (SpGistSearchTreeItem) rb_leftmost(so->queue);
+		for (int orderby = 0; orderby < scan->numberOfOrderBys; ++orderby) {
+			if (so->distances[orderby] < currentWorst.distances[orderby]) {
+				SpGistSearchItem listHead = currentWorst->head;
+				if (listHead->next == NULL) {
+					(void) rb_delete(so->queue, (RBNode) currentWorst);
+				} else {
+					currentWorst->head = listHead->next;
+				}
+				makeTreeItem(heapPtr, leafValue, scan, so->tmpTreeItem);
+				(void) rb_insert(so->queue, (RBNode *) so->tmpTreeItem, &isNew);
+				break;
+			}
+		}
+	}
 }
 
 /*
@@ -316,16 +496,22 @@ spgLeafTest(Relation index, SpGistScanOpaque so,
  *
  * If scanWholeIndex is true, we'll do just that.  If not, we'll stop at the
  * next page boundary once we have reported at least one tuple.
+ *
+ * -- searchForKNearest - set in case of performing KNN-Search, denotes the parameter K
  */
 static void
-spgWalk(Relation index, SpGistScanOpaque so, bool scanWholeIndex,
+spgWalk(Relation index, IndexScanDesc scan, bool scanWholeIndex,
 		storeRes_func storeRes)
 {
 	Buffer		buffer = InvalidBuffer;
 	bool		reportedSome = false;
+	MemoryContext oldcxt;
+	SpGistScanOpaque so = (SpGistScanOpaque) scan->opaque;
+	RBTree *nearestQueue = so->queue;
+	const int searchForKNearest = (const int) so->nnCount;
+	int foundNNearest = 0;
 
-	while (scanWholeIndex || !reportedSome)
-	{
+	while (scanWholeIndex || !reportedSome || searchForKNearest) {
 		ScanStackEntry *stackEntry;
 		BlockNumber blkno;
 		OffsetNumber offset;
@@ -392,8 +578,15 @@ redirect:
 									&leafValue,
 									&recheck))
 					{
+						if (searchForKNearest) {
+							oldcxt = MemoryContextSwitchTo(so->queueCxt);
+							updateQueue(so, &leafTuple->heapPtr,
+									leafValue, &foundNNearest, isnull);
+							MemoryContextSwitchTo(oldcxt);
+						} else {
 						storeRes(so, &leafTuple->heapPtr,
 								 leafValue, isnull, recheck);
+						}
 						reportedSome = true;
 					}
 				}
@@ -438,8 +631,15 @@ redirect:
 									&leafValue,
 									&recheck))
 					{
+						if (searchForKNearest) {
+							oldcxt = MemoryContextSwitchTo(so->queueCxt);
+							updateQueue(so, &leafTuple->heapPtr,
+									leafValue, &foundNNearest, isnull);
+							MemoryContextSwitchTo(oldcxt);
+						} else {
 						storeRes(so, &leafTuple->heapPtr,
 								 leafValue, isnull, recheck);
+						}
 						reportedSome = true;
 					}
 
@@ -472,6 +672,16 @@ redirect:
 				}
 				elog(ERROR, "unexpected SPGiST tuple state: %d",
 					 innerTuple->tupstate);
+			}
+
+			if (searchForKNearest && foundNNearest == searchForKNearest) {
+				oldcxt = MemoryContextSwitchTo(so->queueCxt);
+				SpGistSearchTreeItem currentWorst = (SpGistSearchTreeItem) rb_leftmost(nearestQueue);
+				if (so->areaFilter(currentWorst->distances)) {
+					freeScanStackEntry(so, stackEntry);
+					continue;
+				}
+				MemoryContextSwitchTo(oldcxt);
 			}
 
 			/* use temp context for calling inner_consistent */
@@ -558,6 +768,23 @@ redirect:
 		MemoryContextReset(so->tempCxt);
 	}
 
+	if (searchForKNearest) {
+		oldcxt = MemoryContextSwitchTo(so->queueCxt);
+		rb_begin_iterate(nearestQueue, DirectWalk);
+		while (foundNNearest > 0) {
+			SpGistSearchTreeItem titem = (SpGistSearchTreeItem) rb_iterate(nearestQueue);
+			SpGistSearchItem item = titem.head;
+			while (item.next != NULL) {
+				storeRes(so, &item.heapPtr, item.leafValue, false, false);
+				foundNNearest--;
+				item = item.next;
+			}
+			storeRes(so, &item.heapPtr, item.leafValue, false, false);
+			foundNNearest--;
+		}
+		MemoryContextSwitchTo(oldcxt);
+	}
+
 	if (buffer != InvalidBuffer)
 		UnlockReleaseBuffer(buffer);
 }
@@ -584,7 +811,7 @@ spggetbitmap(PG_FUNCTION_ARGS)
 	so->tbm = tbm;
 	so->ntids = 0;
 
-	spgWalk(scan->indexRelation, so, true, storeBitmap);
+	spgWalk(scan->indexRelation, scan, true, storeBitmap);
 
 	PG_RETURN_INT64(so->ntids);
 }
@@ -645,7 +872,7 @@ spggettuple(PG_FUNCTION_ARGS)
 		}
 		so->iPtr = so->nPtrs = 0;
 
-		spgWalk(scan->indexRelation, so, false, storeGettuple);
+		spgWalk(scan->indexRelation, scan, false, storeGettuple);
 
 		if (so->nPtrs == 0)
 			break;				/* must have completed scan */

@@ -127,6 +127,8 @@ typedef struct SpGistState
 	bool		isBuild;		/* true if doing index build */
 } SpGistState;
 
+typedef bool (distance_consistent_fn) (void *spArea, double *distances);
+
 /*
  * Private state of an index scan
  */
@@ -142,6 +144,16 @@ typedef struct SpGistScanOpaqueData
 	/* Index quals to be passed to opclass (null-related quals removed) */
 	int			numberOfKeys;	/* number of index qualifier conditions */
 	ScanKey		keyData;		/* array of index qualifier descriptors */
+
+    /* KNN Search: */
+    int nnCount;    /* value of K when doing K-nearest-neighbor search */
+    RBTree *queue;  /* queue of nearest items */
+    MemoryContext queueCxt; /* context holding the queue */
+    distance_consistent_fn areaFilter; /* similarly to *-consistent functions */
+
+     /* Pre-allocated workspace arrays: */
+    GISTSearchTreeItem *tmpTreeItem;    /* workspace to pass to rb_insert */
+    double     *distances;      /* output area for gistindex_keytest */
 
 	/* Stack of yet-to-be-visited pages */
 	List	   *scanStack;		/* List of ScanStackEntrys */
