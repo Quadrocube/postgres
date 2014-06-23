@@ -397,22 +397,16 @@ spg_quad_leaf_consistent(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(res);
 }
 
-Datum
-spg_quad_inner_distance(PG_FUNCTION_ARGS) 
+double
+spg_quad_inner_distance(Datum spArea, Datum relativePoint) 
 {
-	Datum	*spArea = PG_GETARG_DATUM(0);
-	Datum	*relativePoint = PG_GETARG_DATUM(1);
-	double distance = PG_GETARG_FLOAT8(2);
 	double area_point_distance = DatumGetFloat8(DirectFunctionCall2(dist_pb,
 		spArea, relativePoint));
-	bool res = distance < area_point_distance;
-	PG_RETURN_BOOL(res);
+	return area_point_distance;
 }
 
-Datum
-spg_quad_leaf_distance(PG_FUNCTION_ARGS) 
+double
+spg_quad_leaf_distance(Datum point1, Datum point2) 
 {
-	Datum *p1 = PG_GETARG_DATUM(0);
-	Datum *p2= PG_GETARG_DATUM(1);
 	PG_RETURN_DATUM(DirectFunctionCall2(point_distance, p1, p2));
 }

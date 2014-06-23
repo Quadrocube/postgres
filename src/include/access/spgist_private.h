@@ -129,7 +129,9 @@ typedef struct SpGistState
 
 /* Do we need to traverse the node denoted by *spArea* if we already achieved K points with
  * the worst one being *distances* away from the *relativePoint* */
-typedef bool (distance_consistent_fn) (Datum spArea, Datum relativePoint, double *distances);
+typedef double (spg_inner_distance) (Datum spArea, Datum relativePoint);
+/* Distance between two leaf elements */
+typedef double (spg_leaf_distance)  (Datum point1, Datum point2);
 
 /*
  * Private state of an index scan
@@ -149,13 +151,14 @@ typedef struct SpGistScanOpaqueData
 
     /* KNN Search: */
     int nnCount;    /* value of K when doing K-nearest-neighbor search */
+    Datum focusPoint; 
     RBTree *queue;  /* queue of nearest items */
     MemoryContext queueCxt; /* context holding the queue */
-    distance_consistent_fn areaFilter; /* similarly to *-consistent functions in a KNN query */
+    spg_inner_distance inner_distance_fn;
+    spg_leaf_distance  leaf_distance_fn;
 
      /* Pre-allocated workspace arrays: */
     GISTSearchTreeItem *tmpTreeItem;    /* workspace to pass to rb_insert */
-    double     *distances;      /* output area for gistindex_keytest */
 
 	/* Stack of yet-to-be-visited pages */
 	List	   *scanStack;		/* List of ScanStackEntrys */
