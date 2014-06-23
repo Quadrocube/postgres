@@ -637,7 +637,7 @@ redirect:
 									leafValue, &foundNNearest, isnull);
 							MemoryContextSwitchTo(oldcxt);
 						} else {
-						storeRes(so, &leafTuple->heapPtr,
+							storeRes(so, &leafTuple->heapPtr,
 								 leafValue, isnull, recheck);
 						}
 						reportedSome = true;

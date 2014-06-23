@@ -289,10 +289,11 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 	/* We must descend into the quadrant(s) identified by which */
 	out->nodeNumbers = (int *) palloc(sizeof(int) * 4);
 	out->nNodes = 0;
+	if (in->reconstructedValue != NULL) 
+		out->reconstructedValues = palloc0(sizeof(BOX *) * 4);
+	
 	for (i = 1; i <= 4; i++)
 	{
-		if (in->reconstructedValue != NULL) 
-			out->reconstructedValues = palloc0(sizeof(BOX *) * 4);
 		if (which & (1 << i))
 		{
 			out->nodeNumbers[out->nNodes++] = i - 1;
@@ -394,4 +395,24 @@ spg_quad_leaf_consistent(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_BOOL(res);
+}
+
+Datum
+spg_quad_inner_distance(PG_FUNCTION_ARGS) 
+{
+	Datum	*spArea = PG_GETARG_DATUM(0);
+	Datum	*relativePoint = PG_GETARG_DATUM(1);
+	double distance = PG_GETARG_FLOAT8(2);
+	double area_point_distance = DatumGetFloat8(DirectFunctionCall2(dist_pb,
+		spArea, relativePoint));
+	bool res = distance < area_point_distance;
+	PG_RETURN_BOOL(res);
+}
+
+Datum
+spg_quad_leaf_distance(PG_FUNCTION_ARGS) 
+{
+	Datum *p1 = PG_GETARG_DATUM(0);
+	Datum *p2= PG_GETARG_DATUM(1);
+	PG_RETURN_DATUM(DirectFunctionCall2(point_distance, p1, p2));
 }

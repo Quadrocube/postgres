@@ -127,7 +127,9 @@ typedef struct SpGistState
 	bool		isBuild;		/* true if doing index build */
 } SpGistState;
 
-typedef bool (distance_consistent_fn) (void *spArea, double *distances);
+/* Do we need to traverse the node denoted by *spArea* if we already achieved K points with
+ * the worst one being *distances* away from the *relativePoint* */
+typedef bool (distance_consistent_fn) (Datum spArea, Datum relativePoint, double *distances);
 
 /*
  * Private state of an index scan
@@ -149,7 +151,7 @@ typedef struct SpGistScanOpaqueData
     int nnCount;    /* value of K when doing K-nearest-neighbor search */
     RBTree *queue;  /* queue of nearest items */
     MemoryContext queueCxt; /* context holding the queue */
-    distance_consistent_fn areaFilter; /* similarly to *-consistent functions */
+    distance_consistent_fn areaFilter; /* similarly to *-consistent functions in a KNN query */
 
      /* Pre-allocated workspace arrays: */
     GISTSearchTreeItem *tmpTreeItem;    /* workspace to pass to rb_insert */
