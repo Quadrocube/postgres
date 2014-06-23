@@ -677,7 +677,7 @@ redirect:
 			if (searchForKNearest && foundNNearest == searchForKNearest) {
 				oldcxt = MemoryContextSwitchTo(so->queueCxt);
 				SpGistSearchTreeItem currentWorst = (SpGistSearchTreeItem) rb_leftmost(nearestQueue);
-				if (so->areaFilter(currentWorst->distances)) {
+				if (so->areaFilter(stackEntry->reconstructedValue, currentWorst->distances)) {
 					freeScanStackEntry(so, stackEntry);
 					continue;
 				}

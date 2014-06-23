@@ -291,8 +291,45 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 	out->nNodes = 0;
 	for (i = 1; i <= 4; i++)
 	{
+		if (in->reconstructedValue != NULL) 
+			out->reconstructedValues = palloc0(sizeof(BOX *) * 4);
 		if (which & (1 << i))
+		{
 			out->nodeNumbers[out->nNodes++] = i - 1;
+			if (in->reconstructedValue != NULL) {
+				BOX area = (BOX) in->reconstructedValue;
+				BOX newbox = (BOX) palloc0(sizeof(BOX));
+				switch (i) {
+					case 1:
+						newbox->high = area->high;
+						newbox->low = centroid;
+						break;
+					case 2:
+						Point p1 = palloc0(sizeof(Point)), p2 = palloc0(sizeof(Point));
+						p1->y = centroid->y;
+						p1->x = area->high->x;
+						p2->y = area->low->y;
+						p2->x = centroid->x;
+						newbox->high = p1;
+						newbox->low = p2;
+						break;
+					case 3:
+						newbox->high = centroid;
+						newbox->low = area->low;
+						break;
+					case 4:
+						Point p1 = palloc0(sizeof(Point)), p2 = palloc0(sizeof(Point));
+						p1->x = centroid->x;
+						p1->y = area->high->y;
+						p2->x = area->low->x;
+						p2->y = centroid->y;
+						newbox->high = p1;
+						newbox->low = p2;
+						break;
+				}
+				out->reconstructedValues[i] = newbox;
+			}
+		}
 	}
 
 	PG_RETURN_VOID();
