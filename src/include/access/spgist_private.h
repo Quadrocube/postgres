@@ -139,7 +139,10 @@ typedef double (spg_leaf_distance)  (Datum point1, Datum point2);
 typedef struct SpGistScanOpaqueData
 {
 	SpGistState state;			/* see above */
+        RBTree	   *queue;			/* queue of unvisited items */
+	MemoryContext queueCxt;		/* context holding the queue */
 	MemoryContext tempCxt;		/* short-lived memory context */
+	GISTSearchTreeItem *curTreeItem;	/* current queue item, if any */
 
 	/* Control flags showing whether to search nulls and/or non-nulls */
 	bool		searchNulls;	/* scan matches (all) null entries */
@@ -149,19 +152,9 @@ typedef struct SpGistScanOpaqueData
 	int			numberOfKeys;	/* number of index qualifier conditions */
 	ScanKey		keyData;		/* array of index qualifier descriptors */
 
-    /* KNN Search: */
-    int nnCount;    /* value of K when doing K-nearest-neighbor search */
-    Datum focusPoint; 
-    RBTree *queue;  /* queue of nearest items */
-    MemoryContext queueCxt; /* context holding the queue */
-    spg_inner_distance inner_distance_fn;
-    spg_leaf_distance  leaf_distance_fn;
-
-     /* Pre-allocated workspace arrays: */
-    GISTSearchTreeItem *tmpTreeItem;    /* workspace to pass to rb_insert */
-
-	/* Stack of yet-to-be-visited pages */
-	List	   *scanStack;		/* List of ScanStackEntrys */
+        /* Pre-allocated workspace arrays: */
+	SpGistSearchTreeItem *tmpTreeItem;	/* workspace to pass to rb_insert */
+	double	   *distances;		/* output area for gistindex_keytest */
 
 	/* These fields are only used in amgetbitmap scans: */
 	TIDBitmap  *tbm;			/* bitmap being filled */

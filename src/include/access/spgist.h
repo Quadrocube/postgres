@@ -29,7 +29,9 @@
 #define SPGIST_PICKSPLIT_PROC			3
 #define SPGIST_INNER_CONSISTENT_PROC	4
 #define SPGIST_LEAF_CONSISTENT_PROC		5
-#define SPGISTNProc						5
+#define SPGIST_INNER_DISTANCE_PROC      6
+#define SPGIST_LEAF_DISTANCE_PROC       7
+#define SPGISTNProc						7
 
 /*
  * Argument structs for spg_config method
