@@ -131,17 +131,19 @@ typedef struct spgPickSplitOut
 typedef struct spgInnerConsistentIn
 {
 	ScanKey		scankeys;		/* array of operators and comparison values */
-	int			nkeys;			/* length of array */
+        ScanKey         orderbyKeys;
+	int		nkeys;			/* length of array */
+        int             norderbys;
 
 	Datum		reconstructedValue;		/* value reconstructed at parent */
-	int			level;			/* current level (counting from zero) */
+	int		level;			/* current level (counting from zero) */
 	bool		returnData;		/* original data must be returned? */
 
 	/* Data from current inner tuple */
 	bool		allTheSame;		/* tuple is marked all-the-same? */
 	bool		hasPrefix;		/* tuple has a prefix? */
 	Datum		prefixDatum;	/* if so, the prefix value */
-	int			nNodes;			/* number of nodes in the inner tuple */
+	int		nNodes;			/* number of nodes in the inner tuple */
 	Datum	   *nodeLabels;		/* node label values (NULL if none) */
 } spgInnerConsistentIn;
 
@@ -159,7 +161,9 @@ typedef struct spgInnerConsistentOut
 typedef struct spgLeafConsistentIn
 {
 	ScanKey		scankeys;		/* array of operators and comparison values */
-	int			nkeys;			/* length of array */
+        ScanKey         orderbykeys;
+	int		nkeys;			/* length of array */
+        int             norderbys;
 
 	Datum		reconstructedValue;		/* value reconstructed at parent */
 	int			level;			/* current level (counting from zero) */

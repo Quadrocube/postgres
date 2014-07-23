@@ -298,6 +298,7 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 		{
 			out->nodeNumbers[out->nNodes++] = i - 1;
 			if (in->reconstructedValue != NULL) {
+				// TODO: Should I REALLY reconstruct all the quadrants HERE?
 				BOX area = (BOX) in->reconstructedValue;
 				BOX newbox = (BOX) palloc0(sizeof(BOX));
 				switch (i) {
@@ -397,16 +398,41 @@ spg_quad_leaf_consistent(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(res);
 }
 
-double
-spg_quad_inner_distance(Datum spArea, Datum relativePoint) 
+Datum
+spg_quad_inner_distance(PG_FUNCTION_ARGS) 
 {
-	double area_point_distance = DatumGetFloat8(DirectFunctionCall2(dist_pb,
-		spArea, relativePoint));
-	return area_point_distance;
+	spgInnerConsistentIn *in = (spgInnerConsistentIn *) PG_GETARG_POINTER(0);
+	spgInnerConsistentOut *out = (spgInnerConsistentOut *) PG_GETARG_POINTER(1);
+	double **distances = (double **) PG_GETARG_POINTER(1);
+	int norderbys = in->norderbys;
+	int nnodes = out->nNodes;
+	for (int i = 0; i < nnodes; ++i) {
+		double *distance = *distances;
+		Datum spQuadrant = out->reconstructedValues[i];
+		for (int sk_num = 0; sk_num < norderbys; ++sk_num) {
+			Datum relativePoint = in->orderbyKeys[sk_num]->sk_argument;
+			*distance = DatumGetFloat8 (
+				DirectFunctionCall2(dist_pb, spQuadrant, relativePoint) );
+			distance++;
+		}
+		distances++;
+	}
+	PG_RETURN_VOID();
 }
 
-double
-spg_quad_leaf_distance(Datum point1, Datum point2) 
+Datum
+spg_quad_leaf_distance(PG_FUNCTION_ARGS) 
 {
-	PG_RETURN_DATUM(DirectFunctionCall2(point_distance, p1, p2));
+	spgLeafConsistentIn *in = (spgLeafConsistentIn *) PG_GETARG_POINTER(0);
+	double *distances = (double *) PG_GETARG_POINTER(1);
+	int nkeys = in->norderbys;
+	ScanKey orderBy = in->orderbykeys;
+	Datum from_point = in->leafDatum;
+	while(nkeys > 0) {
+		Datum to_point = orderBy->sk_argument;
+		*distances = DatumGetFloat8 (
+			DirectFunctionCall2(point_distance, from_point, to_point) );
+		++orderBy; ++distances; --nkeys; 
+	}
+	PG_RETURN_VOID();
 }

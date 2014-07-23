@@ -188,10 +188,6 @@ spgbeginscan(PG_FUNCTION_ARGS)
 	initSpGistState(&so->state, scan->indexRelation);
 	scan->numberOfOrderBys = norderbys;
 	
-	/* TODO: Temporary placeholders, generalize */
-	so->inner_distance_fn = spg_quad_inner_distance;
-	so->leaf_distance_fn = spg_quad_leaf_distance;
-	
 	so->tempCxt = AllocSetContextCreate(CurrentMemoryContext,
 										"SP-GiST search temporary context",
 										ALLOCSET_DEFAULT_MINSIZE,
@@ -327,10 +323,13 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 	*leafValue = out.leafValue;
 	*recheck = out.recheck;
 	
-	if (result) {
+	if (result && so->numberOfOrderBys > 0) {
 		/* OK, it passes -> compute the distances */
+		in.orderbykeys = so->orderbyData;
+		in.norderbys = so->numberOfOrderBys;
 		procinfo = index_getprocinfo(index, 1, SPGIST_LEAF_DISTANCE_PROC); //TODO Why 1?
-		FunctionCall1Coll(procinfo, index->rd_indcollation[0], PointerGetDatum(&out), distances);
+		FunctionCall2Coll(procinfo, index->rd_indcollation[0], 
+			PointerGetDatum(&in), distances);
 	}
 	
 	MemoryContextSwitchTo(oldCtx);
@@ -576,6 +575,9 @@ redirect:
 			double **distances = (double **) palloc(in.nNodes * sizeof(double *));
 			for (int i = 0; i < in.nNodes; ++i) {
 				distances[i] = (double *) palloc(scan->numberOfOrderBys * sizeof(double));
+				for (int j = 0; j < scan->numberOfOrderBys; ++j) {
+					distances[i][j] = get_float8_infinity();
+				}
 			}
 
 			inner_consistent_input_init(&in, &so, item, &innerTuple);
@@ -598,11 +600,15 @@ redirect:
 								  index->rd_indcollation[0],
 								  PointerGetDatum(&in),
 								  PointerGetDatum(&out));
-				FunctionCall2Coll(distance_procinfo,
-								  index->rd_indcollation[0],
-								  PointerGetDatum(&in),
-								  PointerGetDatum(&out),
-								  PointerGetDatum(distances));
+				if (so->numberOfOrderBys > 0) {
+					in.norderbys = so->numberOfOrderBys;
+					in.orderbyKeys = so->orderbyData;
+					FunctionCall2Coll(distance_procinfo,
+									  index->rd_indcollation[0],
+									  PointerGetDatum(&in),
+									  PointerGetDatum(&out),
+									  PointerGetDatum(distances));
+				}
 			}
 			else
 			{
@@ -611,9 +617,6 @@ redirect:
 				out.nodeNumbers = (int *) palloc(sizeof(int) * in.nNodes);
 				for (i = 0; i < in.nNodes; i++) {
 					out.nodeNumbers[i] = i;
-					for (int j = 0; j < scan->numberOfOrderBys; ++j) {
-						distances[i][j] = get_float8_infinity();
-					}
 				}
 			}
 
