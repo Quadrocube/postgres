@@ -325,8 +325,8 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 	
 	if (result && so->numberOfOrderBys > 0) {
 		/* OK, it passes -> compute the distances */
-		in.orderbykeys = so->orderbyData;
-		in.norderbys = so->numberOfOrderBys;
+		in.orderbykeys = scan->orderByData;
+		in.norderbys = scan->numberOfOrderBys;
 		procinfo = index_getprocinfo(index, 1, SPGIST_LEAF_DISTANCE_PROC); //TODO Why 1?
 		FunctionCall2Coll(procinfo, index->rd_indcollation[0], 
 			PointerGetDatum(&in), distances);
@@ -601,8 +601,8 @@ redirect:
 								  PointerGetDatum(&in),
 								  PointerGetDatum(&out));
 				if (so->numberOfOrderBys > 0) {
-					in.norderbys = so->numberOfOrderBys;
-					in.orderbyKeys = so->orderbyData;
+					in.norderbys = scan->numberOfOrderBys;
+					in.orderbyKeys = scan->orderByData;
 					FunctionCall2Coll(distance_procinfo,
 									  index->rd_indcollation[0],
 									  PointerGetDatum(&in),
