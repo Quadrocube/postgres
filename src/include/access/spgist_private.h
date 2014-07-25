@@ -19,6 +19,7 @@
 #include "nodes/tidbitmap.h"
 #include "storage/relfilenode.h"
 #include "utils/relcache.h"
+#include "utils/rbtree.h"
 
 
 /* Page numbers of fixed-location pages */
@@ -133,16 +134,39 @@ typedef double (spg_inner_distance) (Datum spArea, Datum relativePoint);
 /* Distance between two leaf elements */
 typedef double (spg_leaf_distance)  (Datum point1, Datum point2);
 
+typedef enum SPGistSEARCHITEMSTATE {
+    HEAP_RECHECK,        /* SearchItem is heap item and rechek is needed before reporting */
+    HEAP_NORECHECK,      /* SearchItem is heap item and no rechek is needed */
+    INNER               /* SearchItem is inner tree item - rechek irrelevant */
+} SPGistSEARCHITEMSTATE;
+
+typedef struct SpGistSearchItem
+{
+        SPGistSEARCHITEMSTATE itemState;        /* see above */
+    	Datum   value;                          /* value reconstructed from parent or leafValue if heaptuple */
+	int	level;                          /* level of items on this page */
+	struct SpGistSearchItem *next;          /* list link */
+        ItemPointerData heap;                   /* heap info, if heap tuple */
+} SpGistSearchItem;
+
+typedef struct SpGistSearchTreeItem
+{
+	RBNode		rbnode;			/* this is an RBTree item */
+	SpGistSearchItem *head;		/* first chain member */
+	SpGistSearchItem *lastHeap;	/* last heap-tuple member, if any */
+	double		distances[1];	/* array with numberOfOrderBys entries */
+} SpGistSearchTreeItem;
 /*
  * Private state of an index scan
  */
 typedef struct SpGistScanOpaqueData
 {
+        // TODO: Initialize!
 	SpGistState state;			/* see above */
         RBTree	   *queue;			/* queue of unvisited items */
 	MemoryContext queueCxt;		/* context holding the queue */
 	MemoryContext tempCxt;		/* short-lived memory context */
-	GISTSearchTreeItem *curTreeItem;	/* current queue item, if any */
+        SpGistSearchTreeItem *curTreeItem;
 
 	/* Control flags showing whether to search nulls and/or non-nulls */
 	bool		searchNulls;	/* scan matches (all) null entries */

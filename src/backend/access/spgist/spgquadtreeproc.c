@@ -289,7 +289,7 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 	/* We must descend into the quadrant(s) identified by which */
 	out->nodeNumbers = (int *) palloc(sizeof(int) * 4);
 	out->nNodes = 0;
-	if (in->reconstructedValue != NULL) 
+	if (DatumGetBoxP(in->reconstructedValue) != NULL) 
 		out->reconstructedValues = palloc0(sizeof(BOX *) * 4);
 	
 	for (i = 1; i <= 4; i++)
@@ -297,39 +297,38 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 		if (which & (1 << i))
 		{
 			out->nodeNumbers[out->nNodes++] = i - 1;
-			if (in->reconstructedValue != NULL) {
+			if (DatumGetBoxP(in->reconstructedValue) != NULL) {
 				// TODO: Should I REALLY reconstruct all the quadrants HERE?
-				BOX area = (BOX) in->reconstructedValue;
-				BOX newbox = (BOX) palloc0(sizeof(BOX));
+				BOX *area = DatumGetBoxP(in->reconstructedValue);
+				BOX *newbox = (BOX *) palloc0(sizeof(BOX));
+				Point p1, p2;
 				switch (i) {
 					case 1:
 						newbox->high = area->high;
-						newbox->low = centroid;
+						newbox->low = *centroid;
 						break;
 					case 2:
-						Point p1 = palloc0(sizeof(Point)), p2 = palloc0(sizeof(Point));
-						p1->y = centroid->y;
-						p1->x = area->high->x;
-						p2->y = area->low->y;
-						p2->x = centroid->x;
+						p1.y = centroid->y;
+						p1.x = area->high.x;
+						p2.y = area->low.y;
+						p2.x = centroid->x;
 						newbox->high = p1;
 						newbox->low = p2;
 						break;
 					case 3:
-						newbox->high = centroid;
+						newbox->high = *centroid;
 						newbox->low = area->low;
 						break;
 					case 4:
-						Point p1 = palloc0(sizeof(Point)), p2 = palloc0(sizeof(Point));
-						p1->x = centroid->x;
-						p1->y = area->high->y;
-						p2->x = area->low->x;
-						p2->y = centroid->y;
+						p1.x = centroid->x;
+						p1.y = area->high.y;
+						p2.x = area->low.x;
+						p2.y = centroid->y;
 						newbox->high = p1;
 						newbox->low = p2;
 						break;
 				}
-				out->reconstructedValues[i] = newbox;
+				out->reconstructedValues[i] = BoxPGetDatum(newbox);
 			}
 		}
 	}
@@ -406,11 +405,12 @@ spg_quad_inner_distance(PG_FUNCTION_ARGS)
 	double **distances = (double **) PG_GETARG_POINTER(1);
 	int norderbys = in->norderbys;
 	int nnodes = out->nNodes;
-	for (int i = 0; i < nnodes; ++i) {
+	int i, sk_num;
+	for (i = 0; i < nnodes; ++i) {
 		double *distance = *distances;
 		Datum spQuadrant = out->reconstructedValues[i];
-		for (int sk_num = 0; sk_num < norderbys; ++sk_num) {
-			Datum relativePoint = in->orderbyKeys[sk_num]->sk_argument;
+		for (sk_num = 0; sk_num < norderbys; ++sk_num) {
+			Datum relativePoint = in->orderbyKeys[sk_num].sk_argument;
 			*distance = DatumGetFloat8 (
 				DirectFunctionCall2(dist_pb, spQuadrant, relativePoint) );
 			distance++;

@@ -10,30 +10,7 @@
 #include "utils/memutils.h"
 #include "utils/rel.h"
 
-enum SPGistSEARCHITEMSTATE {
-    HEAP_RECHECK,        /* SearchItem is heap item and rechek is needed before reporting */
-    HEAP_NORECHECK,      /* SearchItem is heap item and no rechek is needed */
-    INNER               /* SearchItem is inner tree item - rechek irrelevant */
-};
-
-typedef struct SpGistSearchItem
-{
-        SPGistSEARCHITEMSTATE itemState;        /* see above */
-    	Datum   value;                          /* value reconstructed from parent or leafValue if heaptuple */
-	int	level;                          /* level of items on this page */
-	struct SpGistSearchItem *next;          /* list link */
-        ItemPointerData heap;                   /* heap info, if heap tuple */
-} GISTSearchItem;
-
-typedef struct SpGistSearchTreeItem
-{
-	RBNode		rbnode;			/* this is an RBTree item */
-	SpGistSearchItem *head;		/* first chain member */
-	SpGistSearchItem *lastHeap;	/* last heap-tuple member, if any */
-	double		distances[1];	/* array with numberOfOrderBys entries */
-} GISTSearchTreeItem;
-
-#define SPGISTHDRSZ offsetof(GISTSearchTreeItem, distances)
+#define SPGISTHDRSZ offsetof(SpGistSearchTreeItem, distances)
 #define SPGISTSearchItemIsHeap(item)	((item).itemState == HEAP_RECHECK \
                                       || (item).itemState == HEAP_NORECHECK)
 
@@ -58,9 +35,9 @@ SpGistSearchTreeItemComparator(const RBNode *a, const RBNode *b, void *arg)
 static void
 SpGistSearchTreeItemCombiner(RBNode *existing, const RBNode *newrb, void *arg)
 {
-	GISTSearchTreeItem *scurrent = (GISTSearchTreeItem *) existing;
-	const GISTSearchTreeItem *snew = (const GISTSearchTreeItem *) newrb;
-	GISTSearchItem *newitem = snew->head;
+	SpGistSearchTreeItem *scurrent = (SpGistSearchTreeItem *) existing;
+	const SpGistSearchTreeItem *snew = (const SpGistSearchTreeItem *) newrb;
+	SpGistSearchItem *newitem = snew->head;
 
 	/* snew should have just one item in its chain */
 	Assert(newitem && newitem->next == NULL);
@@ -90,14 +67,14 @@ SpGistSearchTreeItemCombiner(RBNode *existing, const RBNode *newrb, void *arg)
 	}
 }
 
-#define GSTIHDRSZ offsetof(SpGistearchTreeItem, distances)
+#define GSTIHDRSZ offsetof(SpGistSearchTreeItem, distances)
 
 static RBNode *
 SpGistSearchTreeItemAllocator(void *arg)
 {
 	IndexScanDesc scan = (IndexScanDesc) arg;
 
-	return palloc(GSTIHDRSZ + sizeof(double) * scan->numberOfOrderBys);
+	return (RBNode *) palloc(GSTIHDRSZ + sizeof(double) * scan->numberOfOrderBys);
 }
 
 static void
@@ -106,19 +83,8 @@ SpGistSearchTreeItemDeleter(RBNode *rb, void *arg)
 	pfree(rb);
 }
 
-/*
- * Create new item to insert in rb-tree
- * Invoked in heap context
- */
-static void initTreeItem(const SpGistSearchItem *source, const double *distances,
-        SpGistSearchTreeItem *dest) {
-	source->next = NULL;
-	dest->head = source;
-	dest->distances = distances == NULL ? dest->distances : distances;
-}
-
 static void 
-addSearchItemToQueue(IndexScanDesc *scan, SpGistSearchItem *item, double *distances) {
+addSearchItemToQueue(IndexScanDesc scan, SpGistSearchItem *item, double *distances) {
 	bool isNew;
 	SpGistScanOpaque so = (SpGistScanOpaque) scan->opaque;
 	SpGistSearchTreeItem *newItem = so->tmpTreeItem;
@@ -129,15 +95,15 @@ addSearchItemToQueue(IndexScanDesc *scan, SpGistSearchItem *item, double *distan
 	rb_insert(so->queue, (RBNode *) newItem, &isNew);
 }
 
-GISTSearchItem *newHeapItem(int level, ItemPointerData heapPtr, 
+SpGistSearchItem *newHeapItem(int level, ItemPointerData heapPtr, 
 		Datum leafValue, bool recheck) {
-	GISTSearchItem *newItem = (GISTSearchItem *) palloc(sizeof(GISTSearchItem));
+	SpGistSearchItem *newItem = (SpGistSearchItem *) palloc(sizeof(SpGistSearchItem));
 	newItem->next = NULL;
 	newItem->level = level;
 	newItem->heap = heapPtr;
 	newItem->value = leafValue;
 	newItem->itemState = recheck ? HEAP_RECHECK : HEAP_NORECHECK;
-	
+	return newItem;
 }
 
 #ifdef	__cplusplus

@@ -420,6 +420,10 @@ DATA(insert (	4015   600 600 2 4019 ));
 DATA(insert (	4015   600 600 3 4020 ));
 DATA(insert (	4015   600 600 4 4021 ));
 DATA(insert (	4015   600 600 5 4022 ));
+// Inner Distance
+DATA(insert (   4015   600 600 6 8034 ));
+// Leaf Distance
+DATA(insert (   4015   600 600 7 8035 ));
 DATA(insert (	4016   600 600 1 4023 ));
 DATA(insert (	4016   600 600 2 4024 ));
 DATA(insert (	4016   600 600 3 4025 ));
