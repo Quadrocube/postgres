@@ -250,10 +250,47 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 	/* We must descend into the children identified by which */
 	out->nodeNumbers = (int *) palloc(sizeof(int) * 2);
 	out->nNodes = 0;
+	
+	if (in->level == 0 && in->norderbys > 0) {
+        BOX *newbox = palloc(sizeof(BOX));
+        Point newp;
+        newp.x = newp.y = get_float8_infinity();
+        newbox->high = newp;
+        newp.x = newp.y = -get_float8_infinity();
+        newbox->low = newp;
+        in->reconstructedValue = PointerGetDatum(newbox);
+    }
+    if (DatumGetBoxP(in->reconstructedValue) != NULL) {
+		out->reconstructedValues = (Datum *) palloc(sizeof(Datum) * 4);
+		BOX *area = DatumGetBoxP(in->reconstructedValue);
+		BOX *newbox1 = (BOX *) palloc0(sizeof(BOX));
+		BOX *newbox2 = (BOX *) palloc0(sizeof(BOX));
+		Point p1, p2;
+		switch (in->level % 2) {
+			case 0:
+				p1.x = p2.x = coord;
+				p1.y = area->high.y;
+				p2.y = area->low.y;
+				break;
+			case 1:
+				p1.y = p2.y = coord;
+				p1.x = area->high.x;
+				p2.x = area->low.x;
+				break;
+		}
+		newbox1->low = area->low;
+		newbox1->high = p1;
+		out->reconstructedValues[0] = BoxPGetDatum(newbox1);
+		newbox2->low = p2;
+		newbox2->high = area->high;
+		out->reconstructedValues[1] = BoxPGetDatum(newbox2);
+	}
+	
 	for (i = 1; i <= 2; i++)
 	{
-		if (which & (1 << i))
+		if (which & (1 << i)) {
 			out->nodeNumbers[out->nNodes++] = i - 1;
+		}
 	}
 
 	/* Set up level increments, too */

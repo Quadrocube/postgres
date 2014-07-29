@@ -4940,10 +4940,6 @@ DATA(insert OID = 4025 (  spg_kd_picksplit	PGNSP PGUID 12 1 0 0 0 f f f f t f i 
 DESCR("SP-GiST support for k-d tree over point");
 DATA(insert OID = 4026 (  spg_kd_inner_consistent	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 2278 "2281 2281" _null_ _null_ _null_ _null_  spg_kd_inner_consistent _null_ _null_ _null_ ));
 DESCR("SP-GiST support for k-d tree over point");
-DATA(insert OID = 8036 (  spg_kd_inner_distance	PGNSP PGUID 12 1 0 0 0 f f f f t f i 3 0 2278 "2281 2281 2281" _null_ _null_ _null_ _null_  spg_kd_inner_distance _null_ _null_ _null_ ));
-DESCR("SP-GiST support for quad tree and k-d tree over point");
-DATA(insert OID = 8037 (  spg_kd_leaf_distance	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 2278 "2281 2281" _null_ _null_ _null_ _null_  spg_quad_kd_distance _null_ _null_ _null_ ));
-DESCR("SP-GiST support for quad tree and k-d tree over point");
 
 DATA(insert OID = 4027 (  spg_text_config	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 2278 "2281 2281" _null_ _null_ _null_ _null_  spg_text_config _null_ _null_ _null_ ));
 DESCR("SP-GiST support for radix tree over text");
