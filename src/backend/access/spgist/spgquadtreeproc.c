@@ -286,11 +286,23 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 			break;				/* no need to consider remaining conditions */
 	}
 
+    out->levelAdds = palloc(sizeof(int) * 4);
+    for (i = 0; i < 4; ++i) out->levelAdds[i] = 1;
+
 	/* We must descend into the quadrant(s) identified by which */
 	out->nodeNumbers = (int *) palloc(sizeof(int) * 4);
 	out->nNodes = 0;
-	if (DatumGetBoxP(in->reconstructedValue) != NULL) 
-		out->reconstructedValues = palloc0(sizeof(BOX *) * 4);
+    if (in->level == 0 && in->norderbys > 0) {
+        BOX *newbox = palloc(sizeof(BOX));
+        Point newp;
+        newp.x = newp.y = get_float8_infinity();
+        newbox->high = newp;
+        newp.x = newp.y = -get_float8_infinity();
+        newbox->low = newp;
+        in->reconstructedValue = PointerGetDatum(newbox);
+    }
+    if (DatumGetBoxP(in->reconstructedValue) != NULL) 
+		out->reconstructedValues = (Datum *) palloc(sizeof(Datum) * 4);
 	
 	for (i = 1; i <= 4; i++)
 	{
@@ -298,7 +310,6 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 		{
 			out->nodeNumbers[out->nNodes++] = i - 1;
 			if (DatumGetBoxP(in->reconstructedValue) != NULL) {
-				// TODO: Should I REALLY reconstruct all the quadrants HERE?
 				BOX *area = DatumGetBoxP(in->reconstructedValue);
 				BOX *newbox = (BOX *) palloc0(sizeof(BOX));
 				Point p1, p2;
@@ -328,7 +339,7 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 						newbox->low = p2;
 						break;
 				}
-				out->reconstructedValues[i] = BoxPGetDatum(newbox);
+				out->reconstructedValues[i-1] = BoxPGetDatum(newbox);
 			}
 		}
 	}
@@ -402,7 +413,7 @@ spg_quad_inner_distance(PG_FUNCTION_ARGS)
 {
 	spgInnerConsistentIn *in = (spgInnerConsistentIn *) PG_GETARG_POINTER(0);
 	spgInnerConsistentOut *out = (spgInnerConsistentOut *) PG_GETARG_POINTER(1);
-	double **distances = (double **) PG_GETARG_POINTER(1);
+	double **distances = (double **) PG_GETARG_POINTER(2);
 	int norderbys = in->norderbys;
 	int nnodes = out->nNodes;
 	int i, sk_num;
@@ -412,7 +423,7 @@ spg_quad_inner_distance(PG_FUNCTION_ARGS)
 		for (sk_num = 0; sk_num < norderbys; ++sk_num) {
 			Datum relativePoint = in->orderbyKeys[sk_num].sk_argument;
 			*distance = DatumGetFloat8 (
-				DirectFunctionCall2(dist_pb, spQuadrant, relativePoint) );
+				DirectFunctionCall2(dist_pb, relativePoint, spQuadrant) );
 			distance++;
 		}
 		distances++;

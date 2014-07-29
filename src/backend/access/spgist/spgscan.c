@@ -24,6 +24,7 @@
 #include "utils/rel.h"
 #include "access/spgist_search.h"
 
+extern double get_float8_infinity();
 
 typedef void (*storeRes_func) (SpGistScanOpaque so, ItemPointer heapPtr,
 								 Datum leafValue, bool isnull, bool recheck);
@@ -31,9 +32,11 @@ typedef void (*storeRes_func) (SpGistScanOpaque so, ItemPointer heapPtr,
 static void
 freeSearchTreeItem(SpGistScanOpaque so, SpGistSearchItem *item)
 {
-
-	if (!so->state.attType.attbyval && DatumGetPointer(item->value) != NULL)
+	if (!so->state.attType.attbyval 
+            && DatumGetPointer(item->value) != NULL
+            && item->itemState == INNER) {
 		pfree(DatumGetPointer(item->value));
+    }
 	pfree(item);
 }
 
@@ -48,7 +51,6 @@ resetSpGistScanOpaque(IndexScanDesc scan)
 	SpGistSearchItem *startEntry;
 
 	MemoryContext oldCtx;
-	MemoryContextReset(so->queueCxt);
 	oldCtx = MemoryContextSwitchTo(so->queueCxt);
 	memset(so->distances, 0, sizeof(double) * scan->numberOfOrderBys);
 	
@@ -167,11 +169,12 @@ spgbeginscan(PG_FUNCTION_ARGS)
 {
 	Relation	rel = (Relation) PG_GETARG_POINTER(0);
 	int			keysz = PG_GETARG_INT32(1);
+	int			orderbys = PG_GETARG_INT32(2);
 
 	IndexScanDesc scan;
 	SpGistScanOpaque so;
 
-	scan = RelationGetIndexScan(rel, keysz, 0);
+	scan = RelationGetIndexScan(rel, keysz, orderbys);
 
 	so = (SpGistScanOpaque) palloc0(sizeof(SpGistScanOpaqueData));
 	if (keysz > 0)
@@ -187,7 +190,10 @@ spgbeginscan(PG_FUNCTION_ARGS)
 										ALLOCSET_DEFAULT_MAXSIZE);
 
 	/* Set up indexTupDesc and xs_itupdesc in case it's an index-only scan */
+	// TODO: Scan cxt to wipe after endscan?
 	so->indexTupDesc = scan->xs_itupdesc = RelationGetDescr(rel);
+	so->tmpTreeItem = palloc(SPGISTHDRSZ + sizeof(double) * scan->numberOfOrderBys);
+	so->distances = palloc(sizeof(double) * scan->numberOfOrderBys);
 
 	scan->opaque = so;
 
@@ -205,23 +211,22 @@ spgrescan(PG_FUNCTION_ARGS)
 {
 	IndexScanDesc scan = (IndexScanDesc) PG_GETARG_POINTER(0);
 	SpGistScanOpaque so = (SpGistScanOpaque) scan->opaque;
-	ScanKey		scankey = (ScanKey) PG_GETARG_POINTER(1);
+	ScanKey		scankeys = (ScanKey) PG_GETARG_POINTER(1);
+	ScanKey		orderbys = (ScanKey) PG_GETARG_POINTER(3);
 	
 	MemoryContext oldCxt;
 
 	/* copy scankeys into local storage */
-	if (scankey && scan->numberOfKeys > 0)
+	if (scankeys && scan->numberOfKeys > 0)
 	{
-		memmove(scan->keyData, scankey,
+		memmove(scan->keyData, scankeys,
 				scan->numberOfKeys * sizeof(ScanKeyData));
 	}
 
 	/* preprocess scankeys, set up the representation in *so */
 	spgPrepareScanKeys(scan);
 
-	/* set up starting stack entries */
-	resetSpGistScanOpaque(scan);
-	
+	MemoryContextReset(so->queueCxt);
 	oldCxt = MemoryContextSwitchTo(so->queueCxt);
 	so->queue = rb_create(SPGISTHDRSZ + sizeof (double) * scan->numberOfOrderBys,
 			SpGistSearchTreeItemComparator,
@@ -230,6 +235,15 @@ spgrescan(PG_FUNCTION_ARGS)
 			SpGistSearchTreeItemDeleter,
 			scan);
 	MemoryContextSwitchTo(oldCxt);
+	
+	/* set up starting stack entries */
+	resetSpGistScanOpaque(scan);
+	
+	if (orderbys && scan->numberOfOrderBys > 0)
+	{
+		memmove(scan->orderByData, orderbys,
+				scan->numberOfOrderBys * sizeof(ScanKeyData));
+	}
 
 	PG_RETURN_VOID();
 }
@@ -318,7 +332,7 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 		/* OK, it passes -> compute the distances */
 		in.orderbykeys = scan->orderByData;
 		in.norderbys = scan->numberOfOrderBys;
-		procinfo = index_getprocinfo(index, 1, SPGIST_LEAF_DISTANCE_PROC); //TODO Why 1?
+		procinfo = index_getprocinfo(index, 1, SPGIST_LEAF_DISTANCE_PROC);
 		FunctionCall2Coll(procinfo, index->rd_indcollation[0], 
 			PointerGetDatum(&in), PointerGetDatum(distances));
 	}
@@ -328,8 +342,9 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 	return result;
 }
 
-void inner_consistent_input_init(spgInnerConsistentIn *in, SpGistScanOpaque so, 
+void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan, 
 			SpGistSearchItem *item, SpGistInnerTuple innerTuple) {
+	SpGistScanOpaque so = scan->opaque;
 	in->scankeys = so->keyData;
 	in->nkeys = so->numberOfKeys;
 	in->reconstructedValue = item->value;
@@ -340,6 +355,8 @@ void inner_consistent_input_init(spgInnerConsistentIn *in, SpGistScanOpaque so,
 	in->prefixDatum = SGITDATUM(innerTuple, &so->state);
 	in->nNodes = innerTuple->nNodes;
 	in->nodeLabels = spgExtractNodeLabels(&so->state, innerTuple);
+	in->norderbys = scan->numberOfOrderBys;
+    in->orderbyKeys = scan->orderByData;
 }
 
 /*
@@ -566,6 +583,8 @@ redirect:
 			/* use temp context for calling inner_consistent */
 			oldCxt = MemoryContextSwitchTo(so->tempCxt);
 			
+			inner_consistent_input_init(&in, scan, item, innerTuple);
+
 			distances = (double **) palloc(in.nNodes * sizeof(double *));
 			for (i = 0; i < in.nNodes; ++i) {
 				distances[i] = (double *) palloc(scan->numberOfOrderBys * sizeof(double));
@@ -573,8 +592,6 @@ redirect:
 					distances[i][j] = get_float8_infinity();
 				}
 			}
-
-			inner_consistent_input_init(&in, so, item, innerTuple);
 
 			/* collect node pointers */
 			nodes = (SpGistNodeTuple *) palloc(sizeof(SpGistNodeTuple) * in.nNodes);
@@ -595,8 +612,6 @@ redirect:
 								  PointerGetDatum(&in),
 								  PointerGetDatum(&out));
 				if (scan->numberOfOrderBys > 0) {
-					in.norderbys = scan->numberOfOrderBys;
-					in.orderbyKeys = scan->orderByData;
 					FunctionCall3Coll(distance_procinfo,
 									  index->rd_indcollation[0],
 									  PointerGetDatum(&in),
@@ -653,14 +668,13 @@ redirect:
 			MemoryContextSwitchTo(oldCxt);
 		}
 
-		/* done with this scan stack entry */
+		/* done with this scan entry */
 		oldCxt = MemoryContextSwitchTo(so->queueCxt);
 		freeSearchTreeItem(so, item);
 		MemoryContextSwitchTo(oldCxt);
 		/* clear temp context before proceeding to the next one */
 		MemoryContextReset(so->tempCxt);
 	}
-
 
 	if (buffer != InvalidBuffer)
 		UnlockReleaseBuffer(buffer);
@@ -731,7 +745,7 @@ spggettuple(PG_FUNCTION_ARGS)
 	{
 		if (so->iPtr < so->nPtrs)
 		{
-			/* continuing to return tuples from a leaf page */
+			/* continuing to return reported tuples */
 			scan->xs_ctup.t_self = so->heapPtrs[so->iPtr];
 			scan->xs_recheck = so->recheck[so->iPtr];
 			scan->xs_itup = so->indexTups[so->iPtr];
