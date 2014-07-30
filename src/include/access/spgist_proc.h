@@ -10,6 +10,8 @@
 #include "utils/memutils.h"
 #include "utils/rel.h"
 
+#include "utils/geo_decls.h"
+
 #define SPGISTHDRSZ offsetof(SpGistSearchTreeItem, distances)
 #define SPGISTSearchItemIsHeap(item)	((item).itemState == HEAP_RECHECK \
                                       || (item).itemState == HEAP_NORECHECK)

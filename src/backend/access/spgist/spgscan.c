@@ -26,7 +26,7 @@
 
 extern double get_float8_infinity();
 
-typedef void (*storeRes_func) (SpGistScanOpaque so, ItemPointer heapPtr,
+typedef void (*storeRes_func) (SpGistScanOpaque so, ItemPointerData heapPtr,
 								 Datum leafValue, bool isnull, bool recheck);
 
 static void
@@ -285,7 +285,8 @@ static bool
 spgLeafTest(Relation index, IndexScanDesc scan,
 			SpGistLeafTuple leafTuple, bool isnull,
 			int level, Datum reconstructedValue,
-			Datum *leafValue, bool *recheck, double *distances)
+			Datum *leafValue, bool *recheck, double **distances, 
+			bool *reportedSome, storeRes_func storeRes)
 {
 	bool		result;
 	Datum		leafDatum;
@@ -315,6 +316,8 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 	in.level = level;
 	in.returnData = so->want_itup;
 	in.leafDatum = leafDatum;
+	in.orderbykeys = scan->orderByData;
+	in.norderbys = scan->numberOfOrderBys;
 
 	out.leafValue = (Datum) 0;
 	out.recheck = false;
@@ -327,14 +330,19 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 
 	*leafValue = out.leafValue;
 	*recheck = out.recheck;
+	if (result && distances != NULL) {
+		*distances = out.distances;
+	}
 	
-	if (result && scan->numberOfOrderBys > 0) {
-		/* OK, it passes -> compute the distances */
-		in.orderbykeys = scan->orderByData;
-		in.norderbys = scan->numberOfOrderBys;
-		procinfo = index_getprocinfo(index, 1, SPGIST_LEAF_DISTANCE_PROC);
-		FunctionCall2Coll(procinfo, index->rd_indcollation[0], 
-			PointerGetDatum(&in), PointerGetDatum(distances));
+	if (scan->numberOfOrderBys > 0) {
+		MemoryContextSwitchTo(so->queueCxt);
+		addSearchItemToQueue(scan,
+			newHeapItem(level, 
+				leafTuple->heapPtr, leafValue, recheck), so->distances);
+	} else {
+		storeRes(so, leafTuple->heapPtr,
+				 leafValue, isnull, recheck);
+		*reportedSome = true;
 	}
 	
 	MemoryContextSwitchTo(oldCtx);
@@ -357,7 +365,6 @@ void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan,
 	in->nodeLabels = spgExtractNodeLabels(&so->state, innerTuple);
 	in->norderbys = scan->numberOfOrderBys;
     in->orderbyKeys = scan->orderByData;
-	in->supplDatum = item->value;
 }
 
 /*
@@ -471,27 +478,9 @@ redirect:
 					}
 
 					Assert(ItemPointerIsValid(&leafTuple->heapPtr));
-					if (spgLeafTest(index, scan,
-									leafTuple, isnull,
-									item->level,
-									item->value,
-									&leafValue,
-									&recheck,
-									so->distances))
-					{
-						if (scan->numberOfOrderBys > 0) {
-							oldCxt = MemoryContextSwitchTo(so->queueCxt);
-							addSearchItemToQueue(scan,
-								newHeapItem(item->level, 
-									leafTuple->heapPtr, leafValue, recheck),
-								so->distances);
-							MemoryContextSwitchTo(oldCxt);
-						} else {
-							storeRes(so, &leafTuple->heapPtr,
-									 leafValue, isnull, recheck);
-							reportedSome = true;
-						}
-					}
+					spgLeafTest(index, scan, leafTuple, isnull, item->level,
+									item->value, &leafValue, &recheck,
+									&so->distances, &reportedSome, storeRes);
 				}
 			}
 			else
@@ -527,28 +516,9 @@ redirect:
 					}
 
 					Assert(ItemPointerIsValid(&leafTuple->heapPtr));
-					if (spgLeafTest(index, scan,
-									leafTuple, isnull,
-									item->level,
-									item->value,
-									&leafValue,
-									&recheck,
-									so->distances))
-					{
-						if (scan->numberOfOrderBys > 0) {
-							oldCxt = MemoryContextSwitchTo(so->queueCxt);
-							addSearchItemToQueue(scan,
-								newHeapItem(item->level, 
-									leafTuple->heapPtr, leafValue, recheck),
-								so->distances);
-							MemoryContextSwitchTo(oldCxt);
-						} else {
-							storeRes(so, &leafTuple->heapPtr,
-									 leafValue, isnull, recheck);
-							reportedSome = true;
-						}
-					}
-
+					spgLeafTest(index, scan, leafTuple, isnull, item->level,
+									item->value, &leafValue, &recheck,
+									&so->distances, &reportedSome, storeRes);
 					offset = leafTuple->nextOffset;
 				}
 			}
@@ -561,7 +531,7 @@ redirect:
 			FmgrInfo   *consistent_procinfo;
 			SpGistNodeTuple *nodes;
 			SpGistNodeTuple node;
-			int	i, j;
+			int	i;
 
 			innerTuple = (SpGistInnerTuple) PageGetItem(page,
 												PageGetItemId(page, offset));
@@ -583,6 +553,9 @@ redirect:
 			oldCxt = MemoryContextSwitchTo(so->tempCxt);
 			
 			inner_consistent_input_init(&in, scan, item, innerTuple);
+			double *inf_distances = palloc(scan->numberOfOrderBys * sizeof (double));
+			for (i = 0; i < scan->numberOfOrderBys; ++i)
+				inf_distances[i] = get_float8_infinity();
 
 			/* collect node pointers */
 			nodes = (SpGistNodeTuple *) palloc(sizeof(SpGistNodeTuple) * in.nNodes);
@@ -649,9 +622,7 @@ redirect:
 					if (out->distances != NULL) {
 						distances = out->distances[nodeN];
 					} else {
-						distances = palloc(scan->numberOfOrderBys * sizeof (double));
-						for (j = 0; j < scan->numberOfOrderBys; ++j)
-							distances[j] = get_float8_infinity();
+						distances = inf_distances;
 					}
 					newItem->itemState = INNER;
 					addSearchItemToQueue(scan, newItem, distances);
@@ -674,7 +645,7 @@ redirect:
 
 /* storeRes subroutine for getbitmap case */
 static void
-storeBitmap(SpGistScanOpaque so, ItemPointer heapPtr,
+storeBitmap(SpGistScanOpaque so, ItemPointerData heapPtr,
 			Datum leafValue, bool isnull, bool recheck)
 {
 	tbm_add_tuples(so->tbm, heapPtr, 1, recheck);
@@ -701,11 +672,11 @@ spggetbitmap(PG_FUNCTION_ARGS)
 
 /* storeRes subroutine for gettuple case */
 static void
-storeGettuple(SpGistScanOpaque so, ItemPointer heapPtr,
+storeGettuple(SpGistScanOpaque so, ItemPointerData heapPtr,
 			  Datum leafValue, bool isnull, bool recheck)
 {
 	Assert(so->nPtrs < MaxIndexTuplesPerPage);
-	so->heapPtrs[so->nPtrs] = *heapPtr;
+	so->heapPtrs[so->nPtrs] = heapPtr;
 	so->recheck[so->nPtrs] = recheck;
 	if (so->want_itup)
 	{
