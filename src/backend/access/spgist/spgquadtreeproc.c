@@ -32,6 +32,7 @@ spg_quad_config(PG_FUNCTION_ARGS)
 	cfg->labelType = VOIDOID;	/* we don't need node labels */
 	cfg->canReturnData = true;
 	cfg->longValuesOK = false;
+	cfg->suppLen = sizeof (BOX);
 	PG_RETURN_VOID();
 }
 
@@ -213,6 +214,10 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 	}
 
 	Assert(in->nNodes == 4);
+	
+	if (in->norderbys > 0) {
+		out->distances = palloc(in->nNodes * sizeof (double *));
+	}
 
 	/* "which" is a bitmask of quadrants that satisfy all constraints */
 	which = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4);
@@ -341,6 +346,11 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 				}
 				out->reconstructedValues[i-1] = BoxPGetDatum(newbox);
 			}
+			if (in->norderbys > 0) {
+				double *distances = out->distances[i-1];
+				spg_point_distance(out->reconstructedValues[i-1],
+					in->norderbys, in->orderbyKeys, &distances, false);
+			}
 		}
 	}
 
@@ -404,46 +414,12 @@ spg_quad_leaf_consistent(PG_FUNCTION_ARGS)
 		if (!res)
 			break;
 	}
+	
+	if (res && in->norderbys > 0) { 
+		/* ok, it passes -> let's compute the distances */
+		spg_point_distance(in->leafDatum,
+			in->norderbys, in->orderbykeys, out->distances, true);
+	}
 
 	PG_RETURN_BOOL(res);
-}
-
-Datum
-spg_quad_inner_distance(PG_FUNCTION_ARGS) 
-{
-	spgInnerConsistentIn *in = (spgInnerConsistentIn *) PG_GETARG_POINTER(0);
-	spgInnerConsistentOut *out = (spgInnerConsistentOut *) PG_GETARG_POINTER(1);
-	double **distances = (double **) PG_GETARG_POINTER(2);
-	int norderbys = in->norderbys;
-	int nnodes = out->nNodes;
-	int i, sk_num;
-	for (i = 0; i < nnodes; ++i) {
-		double *distance = *distances;
-		Datum spQuadrant = out->reconstructedValues[i];
-		for (sk_num = 0; sk_num < norderbys; ++sk_num) {
-			Datum relativePoint = in->orderbyKeys[sk_num].sk_argument;
-			*distance = DatumGetFloat8 (
-				DirectFunctionCall2(dist_pb, relativePoint, spQuadrant) );
-			distance++;
-		}
-		distances++;
-	}
-	PG_RETURN_VOID();
-}
-
-Datum
-spg_quad_leaf_distance(PG_FUNCTION_ARGS) 
-{
-	spgLeafConsistentIn *in = (spgLeafConsistentIn *) PG_GETARG_POINTER(0);
-	double *distances = (double *) PG_GETARG_POINTER(1);
-	int nkeys = in->norderbys;
-	ScanKey orderBy = in->orderbykeys;
-	Datum from_point = in->leafDatum;
-	while(nkeys > 0) {
-		Datum to_point = orderBy->sk_argument;
-		*distances = DatumGetFloat8 (
-			DirectFunctionCall2(point_distance, from_point, to_point) );
-		++orderBy; ++distances; --nkeys; 
-	}
-	PG_RETURN_VOID();
 }

@@ -32,6 +32,7 @@ spg_kd_config(PG_FUNCTION_ARGS)
 	cfg->labelType = VOIDOID;	/* we don't need node labels */
 	cfg->canReturnData = true;
 	cfg->longValuesOK = false;
+	cfg->suppLen = sizeof (BOX);
 	PG_RETURN_VOID();
 }
 
@@ -171,6 +172,10 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 
 	Assert(in->nNodes == 2);
 
+	if (in->norderbys > 0) {
+		out->distances = palloc(in->nNodes * sizeof (double *));
+	}
+	
 	/* "which" is a bitmask of children that satisfy all constraints */
 	which = (1 << 1) | (1 << 2);
 
@@ -290,6 +295,11 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 	{
 		if (which & (1 << i)) {
 			out->nodeNumbers[out->nNodes++] = i - 1;
+			if (in->norderbys > 0) {
+				double *distances = out->distances[i-1];
+				spg_point_distance(out->reconstructedValues[i-1],
+					in->norderbys, in->orderbyKeys, &distances, false);
+			}
 		}
 	}
 

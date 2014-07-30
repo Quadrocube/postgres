@@ -22,7 +22,7 @@
 #include "utils/datum.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
-#include "access/spgist_search.h"
+#include "access/spgist_proc.h"
 
 extern double get_float8_infinity();
 
@@ -32,7 +32,7 @@ typedef void (*storeRes_func) (SpGistScanOpaque so, ItemPointer heapPtr,
 static void
 freeSearchTreeItem(SpGistScanOpaque so, SpGistSearchItem *item)
 {
-	if (!so->state.attType.attbyval 
+	if (so->state.config.suppLen > 0
             && DatumGetPointer(item->value) != NULL
             && item->itemState == INNER) {
 		pfree(DatumGetPointer(item->value));
@@ -357,6 +357,7 @@ void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan,
 	in->nodeLabels = spgExtractNodeLabels(&so->state, innerTuple);
 	in->norderbys = scan->numberOfOrderBys;
     in->orderbyKeys = scan->orderByData;
+	in->supplDatum = item->value;
 }
 
 /*
@@ -558,11 +559,9 @@ redirect:
 			spgInnerConsistentIn in;
 			spgInnerConsistentOut out;
 			FmgrInfo   *consistent_procinfo;
-			FmgrInfo   *distance_procinfo;
 			SpGistNodeTuple *nodes;
 			SpGistNodeTuple node;
 			int	i, j;
-			double **distances;
 
 			innerTuple = (SpGistInnerTuple) PageGetItem(page,
 												PageGetItemId(page, offset));
@@ -585,14 +584,6 @@ redirect:
 			
 			inner_consistent_input_init(&in, scan, item, innerTuple);
 
-			distances = (double **) palloc(in.nNodes * sizeof(double *));
-			for (i = 0; i < in.nNodes; ++i) {
-				distances[i] = (double *) palloc(scan->numberOfOrderBys * sizeof(double));
-				for (j = 0; j < scan->numberOfOrderBys; ++j) {
-					distances[i][j] = get_float8_infinity();
-				}
-			}
-
 			/* collect node pointers */
 			nodes = (SpGistNodeTuple *) palloc(sizeof(SpGistNodeTuple) * in.nNodes);
 			SGITITERATE(innerTuple, i, node)
@@ -606,18 +597,10 @@ redirect:
 			{
 				/* use user-defined inner consistent method */
 				consistent_procinfo = index_getprocinfo(index, 1, SPGIST_INNER_CONSISTENT_PROC);
-				distance_procinfo = index_getprocinfo(index, 1, SPGIST_INNER_DISTANCE_PROC);
 				FunctionCall2Coll(consistent_procinfo,
 								  index->rd_indcollation[0],
 								  PointerGetDatum(&in),
 								  PointerGetDatum(&out));
-				if (scan->numberOfOrderBys > 0) {
-					FunctionCall3Coll(distance_procinfo,
-									  index->rd_indcollation[0],
-									  PointerGetDatum(&in),
-									  PointerGetDatum(&out),
-									  PointerGetDatum(distances));
-				}
 			}
 			else
 			{
@@ -643,26 +626,35 @@ redirect:
 				Assert(nodeN >= 0 && nodeN < in.nNodes);
 				if (ItemPointerIsValid(&nodes[nodeN]->t_tid))
 				{
+					double *distances;
 					SpGistSearchItem *newItem;
 
 					/* Create new work item for this node */
 					newItem = palloc(sizeof(SpGistSearchItem));
 					newItem->heap = nodes[nodeN]->t_tid;
 					if (out.levelAdds)
-						newItem->level = item->level + out.levelAdds[i];
+						newItem->level = item->level + out.levelAdds[nodeN];
 					else
 						newItem->level = item->level;
 					/* Must copy value out of temp context */
-					if (out.reconstructedValues)
+					if (out.reconstructedValues) {
 						newItem->value =
-							datumCopy(out.reconstructedValues[i],
-									  so->state.attType.attbyval,
-									  so->state.attType.attlen);
-					else
+							datumCopy(out.reconstructedValues[nodeN],
+									  false,
+									  so->state.config.suppLen);
+					} else {
 						newItem->value = (Datum) 0;
+					}
+					
+					if (out->distances != NULL) {
+						distances = out->distances[nodeN];
+					} else {
+						distances = palloc(scan->numberOfOrderBys * sizeof (double));
+						for (j = 0; j < scan->numberOfOrderBys; ++j)
+							distances[j] = get_float8_infinity();
+					}
 					newItem->itemState = INNER;
-
-					addSearchItemToQueue(scan, newItem, distances[i]);
+					addSearchItemToQueue(scan, newItem, distances);
 				}
 			}
 			MemoryContextSwitchTo(oldCxt);

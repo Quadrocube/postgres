@@ -29,9 +29,7 @@
 #define SPGIST_PICKSPLIT_PROC			3
 #define SPGIST_INNER_CONSISTENT_PROC	4
 #define SPGIST_LEAF_CONSISTENT_PROC		5
-#define SPGIST_INNER_DISTANCE_PROC      6
-#define SPGIST_LEAF_DISTANCE_PROC       7
-#define SPGISTNProc						7
+#define SPGISTNProc						5
 
 /*
  * Argument structs for spg_config method
@@ -47,6 +45,9 @@ typedef struct spgConfigOut
 	Oid			labelType;		/* Data type of inner-tuple node labels */
 	bool		canReturnData;	/* Opclass can reconstruct original data */
 	bool		longValuesOK;	/* Opclass can cope with values > 1 page */
+        /* If opclass needs to store any supplimentary data in nodes during the 
+              scan - the size of the structure */
+        int     suppLen; 
 } spgConfigOut;
 
 /*
@@ -142,9 +143,9 @@ typedef struct spgInnerConsistentIn
 	/* Data from current inner tuple */
 	bool		allTheSame;		/* tuple is marked all-the-same? */
 	bool		hasPrefix;		/* tuple has a prefix? */
-	Datum		prefixDatum;	/* if so, the prefix value */
+	Datum		prefixDatum;            /* if so, the prefix value */
 	int		nNodes;			/* number of nodes in the inner tuple */
-	Datum	   *nodeLabels;		/* node label values (NULL if none) */
+	Datum           *nodeLabels;		/* node label values (NULL if none) */
 } spgInnerConsistentIn;
 
 typedef struct spgInnerConsistentOut
@@ -153,6 +154,7 @@ typedef struct spgInnerConsistentOut
 	int		   *nodeNumbers;	/* their indexes in the node array */
 	int		   *levelAdds;		/* increment level by this much for each */
 	Datum	   *reconstructedValues;	/* associated reconstructed values */
+        double     **distances;                 /* associated distances */
 } spgInnerConsistentOut;
 
 /*
@@ -176,6 +178,7 @@ typedef struct spgLeafConsistentOut
 {
 	Datum		leafValue;		/* reconstructed original data, if any */
 	bool		recheck;		/* set true if operator must be rechecked */
+        double          **distances;            /* associated distances */
 } spgLeafConsistentOut;
 
 

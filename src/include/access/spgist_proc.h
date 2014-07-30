@@ -106,6 +106,27 @@ SpGistSearchItem *newHeapItem(int level, ItemPointerData heapPtr,
 	return newItem;
 }
 
+void
+spg_point_distance(Datum to, int norderbys, 
+        ScanKey orderbyKeys, double **distances, bool isLeaf) 
+{
+	int sk_num;
+        *distances = malloc(norderbys * sizeof (double *));
+        double *distance = *distances;
+        for (sk_num = 0; sk_num < norderbys; ++sk_num) {
+            Datum from_point = orderbyKeys[sk_num].sk_argument;
+            if (isLeaf) {
+                *distance = DatumGetFloat8 (
+                    DirectFunctionCall2(point_distance, from_point, to) );
+            } else {
+                *distance = DatumGetFloat8 (
+                    DirectFunctionCall2(dist_pb, from_point, to) );
+            }
+            distance++;
+        }
+}
+
+
 #ifdef	__cplusplus
 }
 #endif

@@ -161,7 +161,6 @@ typedef struct SpGistSearchTreeItem
  */
 typedef struct SpGistScanOpaqueData
 {
-        // TODO: Initialize!
 	SpGistState state;			/* see above */
         RBTree	   *queue;			/* queue of unvisited items */
 	MemoryContext queueCxt;		/* context holding the queue */
