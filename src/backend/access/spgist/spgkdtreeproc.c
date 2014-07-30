@@ -261,13 +261,13 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
         in->reconstructedValue = PointerGetDatum(newbox);
     }
     if (DatumGetBoxP(in->reconstructedValue) != NULL) {
-		out->reconstructedValues = (Datum *) palloc(sizeof(Datum) * 4);
+		out->reconstructedValues = (Datum *) palloc(sizeof(Datum) * 2);
 		BOX *area = DatumGetBoxP(in->reconstructedValue);
 		BOX *newbox1 = (BOX *) palloc0(sizeof(BOX));
 		BOX *newbox2 = (BOX *) palloc0(sizeof(BOX));
 		Point p1, p2;
 		switch (in->level % 2) {
-			case 0:
+            case 0:
 				p1.x = p2.x = coord;
 				p1.y = area->high.y;
 				p2.y = area->low.y;
