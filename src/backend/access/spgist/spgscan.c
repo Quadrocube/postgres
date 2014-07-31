@@ -1,4 +1,3 @@
-char dbg[1024];
 /*-------------------------------------------------------------------------
  *
  * spgscan.c
@@ -24,6 +23,7 @@ char dbg[1024];
 #include "utils/memutils.h"
 #include "utils/rel.h"
 #include "access/spgist_proc.h"
+#include "utils/debug_spg.h"
 
 extern double get_float8_infinity();
 
@@ -292,7 +292,7 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 	spgLeafConsistentIn in;
 	spgLeafConsistentOut out;
 	FmgrInfo   *procinfo;
-	MemoryContext oldCtx;
+	MemoryContext oldCtx = CurrentMemoryContext;
 	SpGistScanOpaque so = scan->opaque;
 	Datum leafValue;
 	bool recheck;
@@ -339,13 +339,13 @@ report:
 			addSearchItemToQueue(scan,
 				newHeapItem(so, level, leafTuple->heapPtr, leafValue, recheck), 
 				out.distances);
+			MemoryContextSwitchTo(oldCtx);
 		} else {
+			MemoryContextSwitchTo(oldCtx);
 			storeRes(so, leafTuple->heapPtr, leafValue, isnull, recheck);
 			*reportedSome = true;
 		}
 	}
-	
-    if (!isnull) MemoryContextSwitchTo(oldCtx);
 
 	return result;
 }
@@ -417,6 +417,7 @@ init:
 			so->curTreeItem = NULL;
 			goto init;
 		}
+		
 
 		MemoryContextSwitchTo(oldCxt);
 redirect:
@@ -437,21 +438,18 @@ redirect:
 			buffer = ReadBuffer(index, blkno);
 			LockBuffer(buffer, BUFFER_LOCK_SHARE);
 		}
+		
 		/* else new pointer points to the same page, no work needed */
 
 		page = BufferGetPage(buffer);
 
 		isnull = SpGistPageStoresNulls(page) ? true : false;
-		if (SPGISTSearchItemIsHeap(*item)) { 
-			SpGistLeafTuple leafTuple;
+		if (SPGISTSearchItemIsHeap(*item)) {
 			/* We store heap items in the queue only in case of ordered search */
 			Assert(scan->numberOfOrderBys > 0);
 			/* Heap items can only be stored on leaf pages */
 			Assert(SpGistPageIsLeaf(page));
-			
-			leafTuple = (SpGistLeafTuple)
-						PageGetItem(page, PageGetItemId(page, offset));
-			storeRes(so, leafTuple->heapPtr, item->value, isnull, 
+			storeRes(so, item->heap, item->value, isnull, 
 				item->itemState == HEAP_RECHECK);
 			reportedSome = true;
 		}
