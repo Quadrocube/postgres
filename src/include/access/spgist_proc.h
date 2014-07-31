@@ -97,13 +97,15 @@ addSearchItemToQueue(IndexScanDesc scan, SpGistSearchItem *item, double *distanc
 	rb_insert(so->queue, (RBNode *) newItem, &isNew);
 }
 
-SpGistSearchItem *newHeapItem(int level, ItemPointerData heapPtr, 
-		Datum leafValue, bool recheck) {
+SpGistSearchItem *newHeapItem(SpGistScanOpaque so, int level, 
+        ItemPointerData heapPtr, Datum leafValue, bool recheck) {
 	SpGistSearchItem *newItem = (SpGistSearchItem *) palloc(sizeof(SpGistSearchItem));
 	newItem->next = NULL;
 	newItem->level = level;
 	newItem->heap = heapPtr;
-	newItem->value = leafValue;
+        /* copy value to queue cxt out of tmp cxt */
+        newItem->value = datumCopy(leafValue, so->state.attType.attbyval, 
+                so->state.attType.attlen);
 	newItem->itemState = recheck ? HEAP_RECHECK : HEAP_NORECHECK;
 	return newItem;
 }

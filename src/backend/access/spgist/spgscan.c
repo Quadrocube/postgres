@@ -190,7 +190,6 @@ spgbeginscan(PG_FUNCTION_ARGS)
 										ALLOCSET_DEFAULT_MAXSIZE);
 
 	/* Set up indexTupDesc and xs_itupdesc in case it's an index-only scan */
-	// TODO: Scan cxt to wipe after endscan?
 	so->indexTupDesc = scan->xs_itupdesc = RelationGetDescr(rel);
 	so->tmpTreeItem = palloc(SPGISTHDRSZ + sizeof(double) * scan->numberOfOrderBys);
 	so->distances = palloc(sizeof(double) * scan->numberOfOrderBys);
@@ -285,7 +284,6 @@ static bool
 spgLeafTest(Relation index, IndexScanDesc scan,
 			SpGistLeafTuple leafTuple, bool isnull,
 			int level, Datum reconstructedValue,
-			Datum *leafValue, bool *recheck, double **distances, 
 			bool *reportedSome, storeRes_func storeRes)
 {
 	bool		result;
@@ -295,14 +293,16 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 	FmgrInfo   *procinfo;
 	MemoryContext oldCtx;
 	SpGistScanOpaque so = scan->opaque;
+	Datum leafValue;
+	bool recheck;
 
 	if (isnull)
 	{
 		/* Should not have arrived on a nulls page unless nulls are wanted */
 		Assert(so->searchNulls);
-		*leafValue = (Datum) 0;
-		*recheck = false;
-		return true;
+		leafValue = (Datum) 0;
+		recheck = false;
+		goto report;
 	}
 
 	leafDatum = SGLTDATUM(leafTuple, &so->state);
@@ -327,22 +327,20 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 											index->rd_indcollation[0],
 											PointerGetDatum(&in),
 											PointerGetDatum(&out)));
-
-	*leafValue = out.leafValue;
-	*recheck = out.recheck;
-	if (result && distances != NULL) {
-		*distances = out.distances;
-	}
+	recheck = out.recheck;
+	leafValue = out.leafValue;
 	
-	if (scan->numberOfOrderBys > 0) {
-		MemoryContextSwitchTo(so->queueCxt);
-		addSearchItemToQueue(scan,
-			newHeapItem(level, 
-				leafTuple->heapPtr, leafValue, recheck), so->distances);
-	} else {
-		storeRes(so, leafTuple->heapPtr,
-				 leafValue, isnull, recheck);
-		*reportedSome = true;
+report:
+	if (result) {
+		if (scan->numberOfOrderBys > 0) {
+			MemoryContextSwitchTo(so->queueCxt);
+			addSearchItemToQueue(scan,
+				newHeapItem(level, leafTuple->heapPtr, leafValue, recheck), 
+				out.distances);
+		} else {
+			storeRes(so, leafTuple->heapPtr, leafValue, isnull, recheck);
+			*reportedSome = true;
+		}
 	}
 	
 	MemoryContextSwitchTo(oldCtx);
@@ -612,7 +610,7 @@ redirect:
 					/* Must copy value out of temp context */
 					if (out.reconstructedValues) {
 						newItem->value =
-							datumCopy(out.reconstructedValues[nodeN],
+							datumCopy(out.reconstructedValues[nodeN], // TODO: switch from reconValues
 									  false,
 									  so->state.config.suppLen);
 					} else {
