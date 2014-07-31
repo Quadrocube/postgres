@@ -335,7 +335,7 @@ report:
 		if (scan->numberOfOrderBys > 0) {
 			MemoryContextSwitchTo(so->queueCxt);
 			addSearchItemToQueue(scan,
-				newHeapItem(level, leafTuple->heapPtr, leafValue, recheck), 
+				newHeapItem(so, level, leafTuple->heapPtr, leafValue, recheck), 
 				out.distances);
 		} else {
 			storeRes(so, leafTuple->heapPtr, leafValue, isnull, recheck);
@@ -449,7 +449,7 @@ redirect:
 			
 			leafTuple = (SpGistLeafTuple)
 						PageGetItem(page, PageGetItemId(page, offset));
-			storeRes(so, &leafTuple->heapPtr, item->value, isnull, 
+			storeRes(so, leafTuple->heapPtr, item->value, isnull, 
 				item->itemState == HEAP_RECHECK);
 			reportedSome = true;
 		}
@@ -458,8 +458,6 @@ redirect:
 			/* Page is a leaf - that is, all it's tuples are heap items */
 			SpGistLeafTuple leafTuple;
 			OffsetNumber max = PageGetMaxOffsetNumber(page);
-			Datum		leafValue = (Datum) 0;
-			bool		recheck = false;
 
 			if (SpGistBlockIsRoot(blkno))
 			{
@@ -477,8 +475,7 @@ redirect:
 
 					Assert(ItemPointerIsValid(&leafTuple->heapPtr));
 					spgLeafTest(index, scan, leafTuple, isnull, item->level,
-									item->value, &leafValue, &recheck,
-									&so->distances, &reportedSome, storeRes);
+									item->value, &reportedSome, storeRes);
 				}
 			}
 			else
@@ -515,8 +512,7 @@ redirect:
 
 					Assert(ItemPointerIsValid(&leafTuple->heapPtr));
 					spgLeafTest(index, scan, leafTuple, isnull, item->level,
-									item->value, &leafValue, &recheck,
-									&so->distances, &reportedSome, storeRes);
+									item->value, &reportedSome, storeRes);
 					offset = leafTuple->nextOffset;
 				}
 			}
@@ -617,8 +613,8 @@ redirect:
 						newItem->value = (Datum) 0;
 					}
 					
-					if (out->distances != NULL) {
-						distances = out->distances[nodeN];
+					if (out.distances != NULL) {
+						distances = out.distances[nodeN];
 					} else {
 						distances = inf_distances;
 					}
@@ -646,7 +642,7 @@ static void
 storeBitmap(SpGistScanOpaque so, ItemPointerData heapPtr,
 			Datum leafValue, bool isnull, bool recheck)
 {
-	tbm_add_tuples(so->tbm, heapPtr, 1, recheck);
+	tbm_add_tuples(so->tbm, &heapPtr, 1, recheck);
 	so->ntids++;
 }
 
