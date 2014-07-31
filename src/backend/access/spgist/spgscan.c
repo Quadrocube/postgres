@@ -1,3 +1,4 @@
+char dbg[1024];
 /*-------------------------------------------------------------------------
  *
  * spgscan.c
@@ -302,6 +303,7 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 		Assert(so->searchNulls);
 		leafValue = (Datum) 0;
 		recheck = false;
+        result = true;
 		goto report;
 	}
 
@@ -343,7 +345,7 @@ report:
 		}
 	}
 	
-	MemoryContextSwitchTo(oldCtx);
+    if (!isnull) MemoryContextSwitchTo(oldCtx);
 
 	return result;
 }
