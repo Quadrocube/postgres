@@ -20,6 +20,7 @@
 #include "catalog/pg_type.h"
 #include "utils/builtins.h"
 #include "utils/geo_decls.h"
+#include "access/spgist_proc.h"
 
 
 Datum
@@ -296,9 +297,8 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 		if (which & (1 << i)) {
 			out->nodeNumbers[out->nNodes++] = i - 1;
 			if (in->norderbys > 0) {
-				double *distances = out->distances[i-1];
 				spg_point_distance(out->reconstructedValues[i-1],
-					in->norderbys, in->orderbyKeys, &distances, false);
+					in->norderbys, in->orderbyKeys, &out->distances[i-1], false);
 			}
 		}
 	}

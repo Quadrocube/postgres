@@ -20,6 +20,7 @@
 #include "catalog/pg_type.h"
 #include "utils/builtins.h"
 #include "utils/geo_decls.h"
+#include "access/spgist_proc.h"
 
 
 Datum
@@ -347,9 +348,8 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 				out->reconstructedValues[i-1] = BoxPGetDatum(newbox);
 			}
 			if (in->norderbys > 0) {
-				double *distances = out->distances[i-1];
 				spg_point_distance(out->reconstructedValues[i-1],
-					in->norderbys, in->orderbyKeys, &distances, false);
+					in->norderbys, in->orderbyKeys, &out->distances[i-1], false);
 			}
 		}
 	}
@@ -418,7 +418,7 @@ spg_quad_leaf_consistent(PG_FUNCTION_ARGS)
 	if (res && in->norderbys > 0) { 
 		/* ok, it passes -> let's compute the distances */
 		spg_point_distance(in->leafDatum,
-			in->norderbys, in->orderbykeys, out->distances, true);
+			in->norderbys, in->orderbykeys, &out->distances, true);
 	}
 
 	PG_RETURN_BOOL(res);
