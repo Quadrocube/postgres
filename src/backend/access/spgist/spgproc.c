@@ -93,6 +93,7 @@ SpGistSearchItem *newHeapItem(SpGistScanOpaque so, int level,
 	return newItem;
 }
 
+/* Point-box distance in the assumption that box is aligned by axis */
 double dist_pb_simplified(Datum p, Datum b) {
 	Point *point = DatumGetPointP(p);
 	BOX *box = DatumGetBoxP(b);
