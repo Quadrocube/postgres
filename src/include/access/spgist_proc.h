@@ -30,15 +30,17 @@ SpGistSearchTreeItemAllocator(void *arg);
 extern void
 SpGistSearchTreeItemDeleter(RBNode *rb, void *arg);
 
-void 
-extern addSearchItemToQueue(IndexScanDesc scan, SpGistSearchItem *item, double *distances);
+extern void 
+addSearchItemToQueue(IndexScanDesc scan, SpGistSearchItem *item, double *distances);
 
 extern SpGistSearchItem *newHeapItem(SpGistScanOpaque so, int level, 
         ItemPointerData heapPtr, Datum leafValue, bool recheck);
 
-void
-extern spg_point_distance(Datum to, int norderbys, 
+extern void
+spg_point_distance(Datum to, int norderbys, 
         ScanKey orderbyKeys, double **distances, bool isLeaf); 
+
+extern double pb_dist_simplified(Datum p, Datum b);
 
 
 #ifdef	__cplusplus

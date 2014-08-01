@@ -93,6 +93,22 @@ SpGistSearchItem *newHeapItem(SpGistScanOpaque so, int level,
 	return newItem;
 }
 
+double dist_pb_simplified(Datum p, Datum b) {
+	Point *point = DatumGetPointP(p);
+	BOX *box = DatumGetBoxP(b);
+	double dx = 0.0, dy = 0.0;
+
+	if (point->x < box->low.x)
+		dx = box->low.x - point->x;
+	if (point->x > box->high.x)
+		dx = point->x - box->high.x;
+	if (point->y < box->low.y)
+		dy = box->low.y - point->y;
+	if (point->y > box->high.y)
+		dy = point->y - box->high.y;
+	return HYPOT(dx,dy);
+}
+
 void
 spg_point_distance(Datum to, int norderbys, 
         ScanKey orderbyKeys, double **distances, bool isLeaf) 
@@ -106,8 +122,7 @@ spg_point_distance(Datum to, int norderbys,
                 *distance = DatumGetFloat8 (
                     DirectFunctionCall2(point_distance, from_point, to) );
             } else {
-                *distance = DatumGetFloat8 (
-                    DirectFunctionCall2(dist_pb, from_point, to) );
+                *distance = dist_pb_simplified(from_point, to);
             }
             distance++;
         }

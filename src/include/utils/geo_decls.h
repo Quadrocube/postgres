@@ -34,11 +34,7 @@
 
 #ifdef EPSILON
 #define FPzero(A)				(fabs(A) <= EPSILON)
-#define FPeq(A,B)				((fabs((A) - (B)) <= EPSILON) \
-                                    || ((A) == get_float8_infinity() \
-                                        && (B) == get_float8_infinity()) \
-                                    || ((A) == -get_float8_infinity() \
-                                        && (B) == -get_float8_infinity()))
+#define FPeq(A,B)				(fabs((A) - (B)) <= EPSILON) 
 #define FPne(A,B)				(fabs((A) - (B)) > EPSILON)
 #define FPlt(A,B)				((B) - (A) > EPSILON)
 #define FPle(A,B)				((A) - (B) <= EPSILON)
