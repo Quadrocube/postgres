@@ -86,9 +86,10 @@ SpGistSearchItem *newHeapItem(SpGistScanOpaque so, int level,
 	newItem->level = level;
 	newItem->heap = heapPtr;
         /* copy value to queue cxt out of tmp cxt */
-        newItem->value = datumCopy(leafValue, so->state.attType.attbyval, 
+    newItem->value = datumCopy(leafValue, so->state.attType.attbyval, 
                 so->state.attType.attlen);
 	newItem->itemState = recheck ? HEAP_RECHECK : HEAP_NORECHECK;
+	newItem->suppValue = (Datum) 0;
 	return newItem;
 }
 

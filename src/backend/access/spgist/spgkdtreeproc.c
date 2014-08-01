@@ -264,11 +264,11 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
         newbox->high = newp;
         newp.x = newp.y = -get_float8_infinity();
         newbox->low = newp;
-        in->reconstructedValue = PointerGetDatum(newbox);
+        in->suppValue = PointerGetDatum(newbox);
     }
-    if (DatumGetBoxP(in->reconstructedValue) != NULL) {
-		out->reconstructedValues = (Datum *) palloc(sizeof(Datum) * 2);
-		BOX *area = DatumGetBoxP(in->reconstructedValue);
+    if (DatumGetBoxP(in->suppValue) != NULL) {
+		out->suppValues = (Datum *) palloc(sizeof(Datum) * 2);
+		BOX *area = DatumGetBoxP(in->suppValue);
 		BOX *newbox1 = (BOX *) palloc0(sizeof(BOX));
 		BOX *newbox2 = (BOX *) palloc0(sizeof(BOX));
 		Point p1, p2;
@@ -286,10 +286,10 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 		}
 		newbox1->low = area->low;
 		newbox1->high = p1;
-		out->reconstructedValues[0] = BoxPGetDatum(newbox1);
+		out->suppValues[0] = BoxPGetDatum(newbox1);
 		newbox2->low = p2;
 		newbox2->high = area->high;
-		out->reconstructedValues[1] = BoxPGetDatum(newbox2);
+		out->suppValues[1] = BoxPGetDatum(newbox2);
 	}
 	
 	for (i = 1; i <= 2; i++)
@@ -297,7 +297,7 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 		if (which & (1 << i)) {
 			out->nodeNumbers[out->nNodes++] = i - 1;
 			if (in->norderbys > 0) {
-				spg_point_distance(out->reconstructedValues[i-1],
+				spg_point_distance(out->suppValues[i-1],
 					in->norderbys, in->orderbyKeys, &out->distances[i-1], false);
 			}
 		}

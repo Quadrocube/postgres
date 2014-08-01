@@ -365,6 +365,7 @@ void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan,
 	in->nodeLabels = spgExtractNodeLabels(&so->state, innerTuple);
 	in->norderbys = scan->numberOfOrderBys;
     in->orderbyKeys = scan->orderByData;
+	in->suppValue = item->suppValue;
 }
 
 /*
@@ -444,6 +445,7 @@ redirect:
 		page = BufferGetPage(buffer);
 
 		isnull = SpGistPageStoresNulls(page) ? true : false;
+
 		if (SPGISTSearchItemIsHeap(*item)) {
 			/* We store heap items in the queue only in case of ordered search */
 			Assert(scan->numberOfOrderBys > 0);
@@ -606,11 +608,19 @@ redirect:
 					/* Must copy value out of temp context */
 					if (out.reconstructedValues) {
 						newItem->value =
-							datumCopy(out.reconstructedValues[nodeN], // TODO: switch from reconValues
-									  false,
-									  so->state.config.suppLen);
+							datumCopy(out.reconstructedValues[nodeN],
+									  so->state.attType.attbyval,
+									  so->state.attType.attlen);
 					} else {
 						newItem->value = (Datum) 0;
+					}
+					
+					if (out.suppValues) {
+						newItem->suppValue = 
+							datumCopy(out.suppValues[nodeN], false,
+									  so->state.config.suppLen);
+					} else {
+						newItem->suppValue = (Datum) 0;
 					}
 					
 					if (out.distances != NULL) {
