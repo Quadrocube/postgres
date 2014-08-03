@@ -23,7 +23,6 @@
 #include "utils/memutils.h"
 #include "utils/rel.h"
 #include "access/spgist_proc.h"
-#include "utils/debug_spg.h"
 
 extern double get_float8_infinity();
 
@@ -42,7 +41,7 @@ freeSearchTreeItem(SpGistScanOpaque so, SpGistSearchItem *item)
 }
 
 /*
- * Initialize scanStack to search the root page, resetting
+ * Initialize queue to search the root page, resetting
  * any previously active scan
  */
 static void
@@ -58,7 +57,7 @@ resetSpGistScanOpaque(IndexScanDesc scan)
 
 	if (so->searchNulls)
 	{
-		/* Stack a work item to scan the null index entries */
+		/* Add a work item to scan the null index entries */
 		startEntry = (SpGistSearchItem *) palloc0(sizeof(SpGistSearchItem));
 		ItemPointerSet(&startEntry->heap, SPGIST_NULL_BLKNO, FirstOffsetNumber);
 		startEntry->itemState = INNER;
@@ -68,7 +67,7 @@ resetSpGistScanOpaque(IndexScanDesc scan)
 
 	if (so->searchNonNulls)
 	{
-		/* Stack a work item to scan the non-null index entries */
+		/* Add a work item to scan the non-null index entries */
 		startEntry = (SpGistSearchItem *) palloc0(sizeof(SpGistSearchItem));
 		ItemPointerSet(&startEntry->heap, SPGIST_ROOT_BLKNO, FirstOffsetNumber);
 		startEntry->itemState = INNER;
@@ -236,7 +235,7 @@ spgrescan(PG_FUNCTION_ARGS)
 			scan);
 	MemoryContextSwitchTo(oldCxt);
 	
-	/* set up starting stack entries */
+	/* set up starting queue entries */
 	resetSpGistScanOpaque(scan);
 	
 	if (orderbys && scan->numberOfOrderBys > 0)
@@ -493,16 +492,16 @@ redirect:
 						if (leafTuple->tupstate == SPGIST_REDIRECT)
 						{
 							/* redirection tuple should be first in chain */
-							Assert(offset == ItemPointerGetOffsetNumber(&stackEntry->ptr));
+							Assert(offset == ItemPointerGetOffsetNumber(&item->ptr));
 							/* transfer attention to redirect point */
 							item->heap = ((SpGistDeadTuple) leafTuple)->pointer;
-							Assert(ItemPointerGetBlockNumber(&stackEntry->ptr) != SPGIST_METAPAGE_BLKNO);
+							Assert(ItemPointerGetBlockNumber(&item->ptr) != SPGIST_METAPAGE_BLKNO);
 							goto redirect;
 						}
 						if (leafTuple->tupstate == SPGIST_DEAD)
 						{
 							/* dead tuple should be first in chain */
-							Assert(offset == ItemPointerGetOffsetNumber(&stackEntry->ptr));
+							Assert(offset == ItemPointerGetOffsetNumber(&item->ptr));
 							/* No live entries on this page */
 							Assert(leafTuple->nextOffset == InvalidOffsetNumber);
 							break;
@@ -538,7 +537,7 @@ redirect:
 				{
 					/* transfer attention to redirect point */
 					item->heap = ((SpGistDeadTuple) innerTuple)->pointer;
-					Assert(ItemPointerGetBlockNumber(&stackEntry->ptr) != SPGIST_METAPAGE_BLKNO);
+					Assert(ItemPointerGetBlockNumber(&item->ptr) != SPGIST_METAPAGE_BLKNO);
 					goto redirect;
 				}
 				elog(ERROR, "unexpected SPGiST tuple state: %d",
