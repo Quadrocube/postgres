@@ -492,16 +492,16 @@ redirect:
 						if (leafTuple->tupstate == SPGIST_REDIRECT)
 						{
 							/* redirection tuple should be first in chain */
-							Assert(offset == ItemPointerGetOffsetNumber(&item->ptr));
+							Assert(offset == ItemPointerGetOffsetNumber(&item->heap));
 							/* transfer attention to redirect point */
 							item->heap = ((SpGistDeadTuple) leafTuple)->pointer;
-							Assert(ItemPointerGetBlockNumber(&item->ptr) != SPGIST_METAPAGE_BLKNO);
+							Assert(ItemPointerGetBlockNumber(&item->heap) != SPGIST_METAPAGE_BLKNO);
 							goto redirect;
 						}
 						if (leafTuple->tupstate == SPGIST_DEAD)
 						{
 							/* dead tuple should be first in chain */
-							Assert(offset == ItemPointerGetOffsetNumber(&item->ptr));
+							Assert(offset == ItemPointerGetOffsetNumber(&item->heap));
 							/* No live entries on this page */
 							Assert(leafTuple->nextOffset == InvalidOffsetNumber);
 							break;
@@ -537,7 +537,7 @@ redirect:
 				{
 					/* transfer attention to redirect point */
 					item->heap = ((SpGistDeadTuple) innerTuple)->pointer;
-					Assert(ItemPointerGetBlockNumber(&item->ptr) != SPGIST_METAPAGE_BLKNO);
+					Assert(ItemPointerGetBlockNumber(&item->heap) != SPGIST_METAPAGE_BLKNO);
 					goto redirect;
 				}
 				elog(ERROR, "unexpected SPGiST tuple state: %d",
