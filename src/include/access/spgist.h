@@ -137,6 +137,7 @@ typedef struct spgInnerConsistentIn
         int             norderbys;
 
 	Datum		reconstructedValue;		/* value reconstructed at parent */
+        Datum           suppValue;              /* supplimentary value of parent */
 	int		level;			/* current level (counting from zero) */
 	bool		returnData;		/* original data must be returned? */
 
@@ -154,6 +155,7 @@ typedef struct spgInnerConsistentOut
 	int		   *nodeNumbers;	/* their indexes in the node array */
 	int		   *levelAdds;		/* increment level by this much for each */
 	Datum	   *reconstructedValues;	/* associated reconstructed values */
+        Datum      *suppValues;                 /* any additional data implementation needs to be stored */
         double     **distances;                 /* associated distances */
 } spgInnerConsistentOut;
 

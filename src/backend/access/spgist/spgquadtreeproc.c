@@ -20,6 +20,7 @@
 #include "catalog/pg_type.h"
 #include "utils/builtins.h"
 #include "utils/geo_decls.h"
+#include "access/spgist_proc.h"
 
 
 Datum
@@ -304,18 +305,18 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
         newbox->high = newp;
         newp.x = newp.y = -get_float8_infinity();
         newbox->low = newp;
-        in->reconstructedValue = PointerGetDatum(newbox);
+        in->suppValue = PointerGetDatum(newbox);
     }
-    if (DatumGetBoxP(in->reconstructedValue) != NULL) 
-		out->reconstructedValues = (Datum *) palloc(sizeof(Datum) * 4);
+    if (DatumGetBoxP(in->suppValue) != NULL) 
+		out->suppValues = (Datum *) palloc(sizeof(Datum) * 4);
 	
 	for (i = 1; i <= 4; i++)
 	{
 		if (which & (1 << i))
 		{
 			out->nodeNumbers[out->nNodes++] = i - 1;
-			if (DatumGetBoxP(in->reconstructedValue) != NULL) {
-				BOX *area = DatumGetBoxP(in->reconstructedValue);
+			if (DatumGetBoxP(in->suppValue) != NULL) {
+				BOX *area = DatumGetBoxP(in->suppValue);
 				BOX *newbox = (BOX *) palloc0(sizeof(BOX));
 				Point p1, p2;
 				switch (i) {
@@ -344,12 +345,11 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 						newbox->low = p2;
 						break;
 				}
-				out->reconstructedValues[i-1] = BoxPGetDatum(newbox);
+				out->suppValues[i-1] = BoxPGetDatum(newbox);
 			}
 			if (in->norderbys > 0) {
-				double *distances = out->distances[i-1];
-				spg_point_distance(out->reconstructedValues[i-1],
-					in->norderbys, in->orderbyKeys, &distances, false);
+				spg_point_distance(out->suppValues[i-1],
+					in->norderbys, in->orderbyKeys, &out->distances[i-1], false);
 			}
 		}
 	}
@@ -418,7 +418,7 @@ spg_quad_leaf_consistent(PG_FUNCTION_ARGS)
 	if (res && in->norderbys > 0) { 
 		/* ok, it passes -> let's compute the distances */
 		spg_point_distance(in->leafDatum,
-			in->norderbys, in->orderbykeys, out->distances, true);
+			in->norderbys, in->orderbykeys, &out->distances, true);
 	}
 
 	PG_RETURN_BOOL(res);

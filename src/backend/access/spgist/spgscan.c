@@ -1,4 +1,3 @@
-char dbg[1024];
 /*-------------------------------------------------------------------------
  *
  * spgscan.c
@@ -42,7 +41,7 @@ freeSearchTreeItem(SpGistScanOpaque so, SpGistSearchItem *item)
 }
 
 /*
- * Initialize scanStack to search the root page, resetting
+ * Initialize queue to search the root page, resetting
  * any previously active scan
  */
 static void
@@ -58,7 +57,7 @@ resetSpGistScanOpaque(IndexScanDesc scan)
 
 	if (so->searchNulls)
 	{
-		/* Stack a work item to scan the null index entries */
+		/* Add a work item to scan the null index entries */
 		startEntry = (SpGistSearchItem *) palloc0(sizeof(SpGistSearchItem));
 		ItemPointerSet(&startEntry->heap, SPGIST_NULL_BLKNO, FirstOffsetNumber);
 		startEntry->itemState = INNER;
@@ -68,7 +67,7 @@ resetSpGistScanOpaque(IndexScanDesc scan)
 
 	if (so->searchNonNulls)
 	{
-		/* Stack a work item to scan the non-null index entries */
+		/* Add a work item to scan the non-null index entries */
 		startEntry = (SpGistSearchItem *) palloc0(sizeof(SpGistSearchItem));
 		ItemPointerSet(&startEntry->heap, SPGIST_ROOT_BLKNO, FirstOffsetNumber);
 		startEntry->itemState = INNER;
@@ -236,7 +235,7 @@ spgrescan(PG_FUNCTION_ARGS)
 			scan);
 	MemoryContextSwitchTo(oldCxt);
 	
-	/* set up starting stack entries */
+	/* set up starting queue entries */
 	resetSpGistScanOpaque(scan);
 	
 	if (orderbys && scan->numberOfOrderBys > 0)
@@ -292,7 +291,7 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 	spgLeafConsistentIn in;
 	spgLeafConsistentOut out;
 	FmgrInfo   *procinfo;
-	MemoryContext oldCtx;
+	MemoryContext oldCtx = CurrentMemoryContext;
 	SpGistScanOpaque so = scan->opaque;
 	Datum leafValue;
 	bool recheck;
@@ -339,13 +338,13 @@ report:
 			addSearchItemToQueue(scan,
 				newHeapItem(so, level, leafTuple->heapPtr, leafValue, recheck), 
 				out.distances);
+			MemoryContextSwitchTo(oldCtx);
 		} else {
+			MemoryContextSwitchTo(oldCtx);
 			storeRes(so, leafTuple->heapPtr, leafValue, isnull, recheck);
 			*reportedSome = true;
 		}
 	}
-	
-    if (!isnull) MemoryContextSwitchTo(oldCtx);
 
 	return result;
 }
@@ -365,6 +364,7 @@ void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan,
 	in->nodeLabels = spgExtractNodeLabels(&so->state, innerTuple);
 	in->norderbys = scan->numberOfOrderBys;
     in->orderbyKeys = scan->orderByData;
+	in->suppValue = item->suppValue;
 }
 
 /*
@@ -417,6 +417,7 @@ init:
 			so->curTreeItem = NULL;
 			goto init;
 		}
+		
 
 		MemoryContextSwitchTo(oldCxt);
 redirect:
@@ -437,21 +438,19 @@ redirect:
 			buffer = ReadBuffer(index, blkno);
 			LockBuffer(buffer, BUFFER_LOCK_SHARE);
 		}
+		
 		/* else new pointer points to the same page, no work needed */
 
 		page = BufferGetPage(buffer);
 
 		isnull = SpGistPageStoresNulls(page) ? true : false;
-		if (SPGISTSearchItemIsHeap(*item)) { 
-			SpGistLeafTuple leafTuple;
+
+		if (SPGISTSearchItemIsHeap(*item)) {
 			/* We store heap items in the queue only in case of ordered search */
 			Assert(scan->numberOfOrderBys > 0);
 			/* Heap items can only be stored on leaf pages */
 			Assert(SpGistPageIsLeaf(page));
-			
-			leafTuple = (SpGistLeafTuple)
-						PageGetItem(page, PageGetItemId(page, offset));
-			storeRes(so, leafTuple->heapPtr, item->value, isnull, 
+			storeRes(so, item->heap, item->value, isnull, 
 				item->itemState == HEAP_RECHECK);
 			reportedSome = true;
 		}
@@ -493,16 +492,16 @@ redirect:
 						if (leafTuple->tupstate == SPGIST_REDIRECT)
 						{
 							/* redirection tuple should be first in chain */
-							Assert(offset == ItemPointerGetOffsetNumber(&stackEntry->ptr));
+							Assert(offset == ItemPointerGetOffsetNumber(&item->heap));
 							/* transfer attention to redirect point */
 							item->heap = ((SpGistDeadTuple) leafTuple)->pointer;
-							Assert(ItemPointerGetBlockNumber(&stackEntry->ptr) != SPGIST_METAPAGE_BLKNO);
+							Assert(ItemPointerGetBlockNumber(&item->heap) != SPGIST_METAPAGE_BLKNO);
 							goto redirect;
 						}
 						if (leafTuple->tupstate == SPGIST_DEAD)
 						{
 							/* dead tuple should be first in chain */
-							Assert(offset == ItemPointerGetOffsetNumber(&stackEntry->ptr));
+							Assert(offset == ItemPointerGetOffsetNumber(&item->heap));
 							/* No live entries on this page */
 							Assert(leafTuple->nextOffset == InvalidOffsetNumber);
 							break;
@@ -538,7 +537,7 @@ redirect:
 				{
 					/* transfer attention to redirect point */
 					item->heap = ((SpGistDeadTuple) innerTuple)->pointer;
-					Assert(ItemPointerGetBlockNumber(&stackEntry->ptr) != SPGIST_METAPAGE_BLKNO);
+					Assert(ItemPointerGetBlockNumber(&item->heap) != SPGIST_METAPAGE_BLKNO);
 					goto redirect;
 				}
 				elog(ERROR, "unexpected SPGiST tuple state: %d",
@@ -608,11 +607,19 @@ redirect:
 					/* Must copy value out of temp context */
 					if (out.reconstructedValues) {
 						newItem->value =
-							datumCopy(out.reconstructedValues[nodeN], // TODO: switch from reconValues
-									  false,
-									  so->state.config.suppLen);
+							datumCopy(out.reconstructedValues[nodeN],
+									  so->state.attType.attbyval,
+									  so->state.attType.attlen);
 					} else {
 						newItem->value = (Datum) 0;
+					}
+					
+					if (out.suppValues) {
+						newItem->suppValue = 
+							datumCopy(out.suppValues[nodeN], false,
+									  so->state.config.suppLen);
+					} else {
+						newItem->suppValue = (Datum) 0;
 					}
 					
 					if (out.distances != NULL) {

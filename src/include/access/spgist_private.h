@@ -128,12 +128,6 @@ typedef struct SpGistState
 	bool		isBuild;		/* true if doing index build */
 } SpGistState;
 
-/* Do we need to traverse the node denoted by *spArea* if we already achieved K points with
- * the worst one being *distances* away from the *relativePoint* */
-typedef double (spg_inner_distance) (Datum spArea, Datum relativePoint);
-/* Distance between two leaf elements */
-typedef double (spg_leaf_distance)  (Datum point1, Datum point2);
-
 typedef enum SPGistSEARCHITEMSTATE {
     HEAP_RECHECK,        /* SearchItem is heap item and rechek is needed before reporting */
     HEAP_NORECHECK,      /* SearchItem is heap item and no rechek is needed */
@@ -144,6 +138,7 @@ typedef struct SpGistSearchItem
 {
         SPGistSEARCHITEMSTATE itemState;        /* see above */
     	Datum   value;                          /* value reconstructed from parent or leafValue if heaptuple */
+        Datum   suppValue;                      /* any additional value an opclass needs to be stored */
 	int	level;                          /* level of items on this page */
 	struct SpGistSearchItem *next;          /* list link */
         ItemPointerData heap;                   /* heap info, if heap tuple */
