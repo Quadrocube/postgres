@@ -26,17 +26,26 @@
 
 extern double get_float8_infinity();
 
-typedef void (*storeRes_func) (SpGistScanOpaque so, ItemPointerData heapPtr,
+typedef void (*storeRes_func) (SpGistScanOpaque so, ItemPointer heapPtr,
 								 Datum leafValue, bool isnull, bool recheck);
 
 static void
 freeSearchTreeItem(SpGistScanOpaque so, SpGistSearchItem *item)
 {
+    elog(WARNING, "suppLen == %d", so->state.config.suppLen);
 	if (so->state.config.suppLen > 0
-            && DatumGetPointer(item->value) != NULL
+            && DatumGetPointer(item->suppValue) != NULL
             && item->itemState == INNER) {
-		pfree(DatumGetPointer(item->value));
+        elog(WARNING, "pfree == %d", item->suppValue);
+		pfree(DatumGetPointer(item->suppValue));
     }
+    if (!so->state.attType.attbyval &&
+            DatumGetPointer(item->value) != NULL) {
+        elog(WARNING, "pfree == %d", item->value);
+        pfree(DatumGetPointer(item->value));
+    }
+
+    elog(WARNING, "pfree == %d", item);
 	pfree(item);
 }
 
@@ -167,6 +176,7 @@ spgPrepareScanKeys(IndexScanDesc scan)
 Datum
 spgbeginscan(PG_FUNCTION_ARGS)
 {
+    elog(WARNING, "beginscan fired");
 	Relation	rel = (Relation) PG_GETARG_POINTER(0);
 	int			keysz = PG_GETARG_INT32(1);
 	int			orderbys = PG_GETARG_INT32(2);
@@ -208,6 +218,7 @@ spgbeginscan(PG_FUNCTION_ARGS)
 Datum
 spgrescan(PG_FUNCTION_ARGS)
 {
+    elog(WARNING, "rescan fired");
 	IndexScanDesc scan = (IndexScanDesc) PG_GETARG_POINTER(0);
 	SpGistScanOpaque so = (SpGistScanOpaque) scan->opaque;
 	ScanKey		scankeys = (ScanKey) PG_GETARG_POINTER(1);
@@ -237,6 +248,7 @@ spgrescan(PG_FUNCTION_ARGS)
 	
 	/* set up starting queue entries */
 	resetSpGistScanOpaque(scan);
+    so->curTreeItem = NULL;
 	
 	if (orderbys && scan->numberOfOrderBys > 0)
 	{
@@ -286,12 +298,13 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 			int level, Datum reconstructedValue,
 			bool *reportedSome, storeRes_func storeRes)
 {
+    elog(WARNING, "Leaf test: entering");
 	bool		result;
 	Datum		leafDatum;
 	spgLeafConsistentIn in;
 	spgLeafConsistentOut out;
 	FmgrInfo   *procinfo;
-	MemoryContext oldCtx = CurrentMemoryContext;
+	MemoryContext oldCtx;
 	SpGistScanOpaque so = scan->opaque;
 	Datum leafValue;
 	bool recheck;
@@ -303,13 +316,13 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 		leafValue = (Datum) 0;
 		recheck = false;
         result = true;
-		goto report;
-	}
-
-	leafDatum = SGLTDATUM(leafTuple, &so->state);
+	} else {
+        leafDatum = SGLTDATUM(leafTuple, &so->state);
+    }
 
 	/* use temp context for calling leaf_consistent */
 	oldCtx = MemoryContextSwitchTo(so->tempCxt);
+    if (isnull) goto report;
 
 	in.scankeys = so->keyData;
 	in.nkeys = so->numberOfKeys;
@@ -333,6 +346,7 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 	
 report:
 	if (result) {
+        elog(WARNING, "Leaf test: success, storing");
 		if (scan->numberOfOrderBys > 0) {
 			MemoryContextSwitchTo(so->queueCxt);
 			addSearchItemToQueue(scan,
@@ -341,10 +355,13 @@ report:
 			MemoryContextSwitchTo(oldCtx);
 		} else {
 			MemoryContextSwitchTo(oldCtx);
-			storeRes(so, leafTuple->heapPtr, leafValue, isnull, recheck);
+			storeRes(so, &leafTuple->heapPtr, leafValue, isnull, recheck);
 			*reportedSome = true;
 		}
-	}
+        elog(WARNING, "Leaf test: success, stored");
+	} else {
+        elog(WARNING, "check failed -> no store =(");
+    }
 
 	return result;
 }
@@ -373,8 +390,6 @@ void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan,
  *
  * If scanWholeIndex is true, we'll do just that.  If not, we'll stop at the
  * next page boundary once we have reported at least one tuple.
- *
- * -- searchForKNearest - set in case of performing KNN-Search, denotes the parameter K
  */
 static void
 spgWalk(Relation index, IndexScanDesc scan, bool scanWholeIndex,
@@ -386,6 +401,7 @@ spgWalk(Relation index, IndexScanDesc scan, bool scanWholeIndex,
 	SpGistScanOpaque so = (SpGistScanOpaque) scan->opaque;
 	
 	while (scanWholeIndex || !reportedSome) {
+        elog(WARNING, "SpgWalk: newturn");
 		BlockNumber blkno;
 		OffsetNumber offset;
 		Page		page;
@@ -446,11 +462,12 @@ redirect:
 		isnull = SpGistPageStoresNulls(page) ? true : false;
 
 		if (SPGISTSearchItemIsHeap(*item)) {
+            elog(WARNING, "SpgWalk: Got heap item, reporting");
 			/* We store heap items in the queue only in case of ordered search */
 			Assert(scan->numberOfOrderBys > 0);
 			/* Heap items can only be stored on leaf pages */
 			Assert(SpGistPageIsLeaf(page));
-			storeRes(so, item->heap, item->value, isnull, 
+			storeRes(so, &item->heap, item->value, isnull, 
 				item->itemState == HEAP_RECHECK);
 			reportedSome = true;
 		}
@@ -462,9 +479,11 @@ redirect:
 
 			if (SpGistBlockIsRoot(blkno))
 			{
+                elog(WARNING, "SpgWalk: Got leaf root");
 				/* When root is a leaf, examine all its tuples */
 				for (offset = FirstOffsetNumber; offset <= max; offset++)
 				{
+                    elog(WARNING, "SpgWalk: leafroot: new item");
 					leafTuple = (SpGistLeafTuple)
 						PageGetItem(page, PageGetItemId(page, offset));
 					if (leafTuple->tupstate != SPGIST_LIVE)
@@ -481,9 +500,11 @@ redirect:
 			}
 			else
 			{
+                elog(WARNING, "SpgWalk: Got leaf page");
 				/* Normal case: just examine the chain we arrived at */
 				while (offset != InvalidOffsetNumber)
 				{
+                    elog(WARNING, "SpgWalk: leafpage: new item");
 					Assert(offset >= FirstOffsetNumber && offset <= max);
 					leafTuple = (SpGistLeafTuple)
 						PageGetItem(page, PageGetItemId(page, offset));
@@ -491,6 +512,7 @@ redirect:
 					{
 						if (leafTuple->tupstate == SPGIST_REDIRECT)
 						{
+                            elog(WARNING, "SpgWalk: leafpage: redirect");
 							/* redirection tuple should be first in chain */
 							Assert(offset == ItemPointerGetOffsetNumber(&item->heap));
 							/* transfer attention to redirect point */
@@ -500,6 +522,7 @@ redirect:
 						}
 						if (leafTuple->tupstate == SPGIST_DEAD)
 						{
+                            elog(WARNING, "SpgWalk: leafpage: dead");
 							/* dead tuple should be first in chain */
 							Assert(offset == ItemPointerGetOffsetNumber(&item->heap));
 							/* No live entries on this page */
@@ -514,12 +537,15 @@ redirect:
 					Assert(ItemPointerIsValid(&leafTuple->heapPtr));
 					spgLeafTest(index, scan, leafTuple, isnull, item->level,
 									item->value, &reportedSome, storeRes);
+                    elog(WARNING, "SpgWalk: leafpage: leaftuple == %d", leafTuple);
+                    elog(WARNING, "SpgWalk: leafpage: nextoffset == %d", leafTuple->nextOffset);
 					offset = leafTuple->nextOffset;
 				}
 			}
 		}
 		else	/* page is inner */
 		{
+            elog(WARNING, "SpgWalk: Got inner page");
 			SpGistInnerTuple innerTuple;
 			spgInnerConsistentIn in;
 			spgInnerConsistentOut out;
@@ -547,6 +573,7 @@ redirect:
 			/* use temp context for calling inner_consistent */
 			oldCxt = MemoryContextSwitchTo(so->tempCxt);
 			
+            elog(WARNING, "SpgWalk: inner_consistent_input_init");
 			inner_consistent_input_init(&in, scan, item, innerTuple);
 			double *inf_distances = palloc(scan->numberOfOrderBys * sizeof (double));
 			for (i = 0; i < scan->numberOfOrderBys; ++i)
@@ -561,6 +588,7 @@ redirect:
 
 			memset(&out, 0, sizeof(out));
 
+            elog(WARNING, "SpgWalk: call consistent method");
 			if (!isnull)
 			{
 				/* use user-defined inner consistent method */
@@ -587,8 +615,10 @@ redirect:
 				if (out.nNodes != 0 && out.nNodes != in.nNodes)
 					elog(ERROR, "inconsistent inner_consistent results for allTheSame inner tuple");
 
+            elog(WARNING, "SpgWalk: get result from consistent");
 			for (i = 0; i < out.nNodes; i++)
 			{
+                elog(WARNING, "SpgWalk: get result from consistent for i == %d", i);
 				int			nodeN = out.nodeNumbers[i];
 
 				Assert(nodeN >= 0 && nodeN < in.nNodes);
@@ -601,19 +631,21 @@ redirect:
 					newItem = palloc(sizeof(SpGistSearchItem));
 					newItem->heap = nodes[nodeN]->t_tid;
 					if (out.levelAdds)
-						newItem->level = item->level + out.levelAdds[nodeN];
+						newItem->level = item->level + out.levelAdds[i];
 					else
 						newItem->level = item->level;
 					/* Must copy value out of temp context */
+                    elog(WARNING, "SpgWalk: copy reconvalues, i == %d", i);
 					if (out.reconstructedValues) {
 						newItem->value =
-							datumCopy(out.reconstructedValues[nodeN],
+							datumCopy(out.reconstructedValues[i],
 									  so->state.attType.attbyval,
 									  so->state.attType.attlen);
 					} else {
 						newItem->value = (Datum) 0;
 					}
 					
+                    elog(WARNING, "SpgWalk: copy suppvalues, i == %d", i);
 					if (out.suppValues) {
 						newItem->suppValue = 
 							datumCopy(out.suppValues[nodeN], false,
@@ -622,36 +654,42 @@ redirect:
 						newItem->suppValue = (Datum) 0;
 					}
 					
+                    elog(WARNING, "SpgWalk: copy distances, i == %d", i);
 					if (out.distances != NULL) {
 						distances = out.distances[nodeN];
 					} else {
 						distances = inf_distances;
 					}
 					newItem->itemState = INNER;
+                    elog(WARNING, "SpgWalk: addSearchItem to queue, i == %d", i);
 					addSearchItemToQueue(scan, newItem, distances);
 				}
 			}
 			MemoryContextSwitchTo(oldCxt);
 		}
 
+        elog(WARNING, "SpgWalk: freeing queue entry");
 		/* done with this scan entry */
 		oldCxt = MemoryContextSwitchTo(so->queueCxt);
 		freeSearchTreeItem(so, item);
 		MemoryContextSwitchTo(oldCxt);
 		/* clear temp context before proceeding to the next one */
 		MemoryContextReset(so->tempCxt);
+        elog(WARNING, "SpgWalk: endrun");
 	}
 
 	if (buffer != InvalidBuffer)
 		UnlockReleaseBuffer(buffer);
+    elog(WARNING, "SpgWalk: exit");
 }
 
 /* storeRes subroutine for getbitmap case */
 static void
-storeBitmap(SpGistScanOpaque so, ItemPointerData heapPtr,
+storeBitmap(SpGistScanOpaque so, ItemPointer heapPtr,
 			Datum leafValue, bool isnull, bool recheck)
 {
-	tbm_add_tuples(so->tbm, &heapPtr, 1, recheck);
+    elog(WARNING, "storeBitmap: entring");
+	tbm_add_tuples(so->tbm, heapPtr, 1, recheck);
 	so->ntids++;
 }
 
@@ -675,23 +713,27 @@ spggetbitmap(PG_FUNCTION_ARGS)
 
 /* storeRes subroutine for gettuple case */
 static void
-storeGettuple(SpGistScanOpaque so, ItemPointerData heapPtr,
+storeGettuple(SpGistScanOpaque so, ItemPointer heapPtr,
 			  Datum leafValue, bool isnull, bool recheck)
 {
+    elog(WARNING, "storeGettuple: entering");
 	Assert(so->nPtrs < MaxIndexTuplesPerPage);
-	so->heapPtrs[so->nPtrs] = heapPtr;
+	so->heapPtrs[so->nPtrs] = *heapPtr;
 	so->recheck[so->nPtrs] = recheck;
+    elog(WARNING, "storeGettuple: recheck == %d", recheck);
 	if (so->want_itup)
 	{
 		/*
 		 * Reconstruct desired IndexTuple.  We have to copy the datum out of
 		 * the temp context anyway, so we may as well create the tuple here.
 		 */
+        elog(WARNING, "storeGettuple: reconstructing itup, mc == %d, isnull == %d", CurrentMemoryContext, isnull);
 		so->indexTups[so->nPtrs] = index_form_tuple(so->indexTupDesc,
 													&leafValue,
 													&isnull);
 	}
 	so->nPtrs++;
+    elog(WARNING, "storeGettuple: leaving");
 }
 
 Datum
@@ -709,6 +751,7 @@ spggettuple(PG_FUNCTION_ARGS)
 
 	for (;;)
 	{
+        elog(WARNING, "spggettuple: newturn");
 		if (so->iPtr < so->nPtrs)
 		{
 			/* continuing to return reported tuples */
@@ -716,6 +759,7 @@ spggettuple(PG_FUNCTION_ARGS)
 			scan->xs_recheck = so->recheck[so->iPtr];
 			scan->xs_itup = so->indexTups[so->iPtr];
 			so->iPtr++;
+            elog(WARNING, "spggettuple: returning true");
 			PG_RETURN_BOOL(true);
 		}
 
@@ -724,17 +768,23 @@ spggettuple(PG_FUNCTION_ARGS)
 			/* Must pfree IndexTuples to avoid memory leak */
 			int			i;
 
-			for (i = 0; i < so->nPtrs; i++)
+            elog(WARNING, "spggettuple: freeing index tuples, cmc == %d", CurrentMemoryContext);
+			for (i = 0; i < so->nPtrs; i++) {
+                elog(WARNING, "pfree ptr[i] == %d", so->indexTups[i]);
 				pfree(so->indexTups[i]);
+            }
+            elog(WARNING, "spggettuple: completed freeing index tuples");
 		}
 		so->iPtr = so->nPtrs = 0;
 
 		spgWalk(scan->indexRelation, scan, false, storeGettuple);
 
+        elog(WARNING, "spggettuple: endturn");
 		if (so->nPtrs == 0)
 			break;				/* must have completed scan */
 	}
 
+    elog(WARNING, "spggettuple: returning false");
 	PG_RETURN_BOOL(false);
 }
 

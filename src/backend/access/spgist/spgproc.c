@@ -58,7 +58,7 @@ SpGistSearchTreeItemAllocator(void *arg)
 {
 	IndexScanDesc scan = (IndexScanDesc) arg;
 
-	return (RBNode *) palloc(GSTIHDRSZ + sizeof(double) * scan->numberOfOrderBys);
+	return (RBNode *) palloc(SPGISTHDRSZ + sizeof(double) * scan->numberOfOrderBys);
 }
 
 void

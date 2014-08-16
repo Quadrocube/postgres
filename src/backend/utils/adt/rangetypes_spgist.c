@@ -67,6 +67,7 @@ spg_range_quad_config(PG_FUNCTION_ARGS)
 	cfg->labelType = VOIDOID;	/* we don't need node labels */
 	cfg->canReturnData = true;
 	cfg->longValuesOK = false;
+    cfg->suppLen = 0; /* we don't need any supplimentary data */
 	PG_RETURN_VOID();
 }
 

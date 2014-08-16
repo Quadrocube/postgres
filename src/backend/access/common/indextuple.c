@@ -127,6 +127,7 @@ index_form_tuple(TupleDesc tupleDescriptor,
 	size = MAXALIGN(size);		/* be conservative */
 
 	tp = (char *) palloc0(size);
+    elog(WARNING, "palloc0 context == %d, ptr == %d", CurrentMemoryContext, tp);
 	tuple = (IndexTuple) tp;
 
 	heap_fill_tuple(tupleDescriptor,
