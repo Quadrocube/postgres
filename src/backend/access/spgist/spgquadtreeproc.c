@@ -345,11 +345,11 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 						newbox->low = p2;
 						break;
 				}
-				out->suppValues[i-1] = BoxPGetDatum(newbox);
+				out->suppValues[out->nNodes-1] = BoxPGetDatum(newbox);
 			}
 			if (in->norderbys > 0) {
-				spg_point_distance(out->suppValues[i-1],
-					in->norderbys, in->orderbyKeys, &out->distances[i-1], false);
+				spg_point_distance(out->suppValues[out->nNodes-1],
+					in->norderbys, in->orderbyKeys, &out->distances[out->nNodes-1], false);
 			}
 		}
 	}
