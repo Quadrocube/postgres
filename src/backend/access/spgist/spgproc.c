@@ -93,6 +93,26 @@ SpGistSearchItem *newHeapItem(SpGistScanOpaque so, int level,
 	return newItem;
 }
 
+void
+freeSearchTreeItem(SpGistScanOpaque so, SpGistSearchItem *item)
+{
+    elog(WARNING, "suppLen == %d", so->state.config.suppLen);
+	if (so->state.config.suppLen > 0
+            && DatumGetPointer(item->suppValue) != NULL
+            && item->itemState == INNER) {
+        elog(WARNING, "pfree == %d", item->suppValue);
+		pfree(DatumGetPointer(item->suppValue));
+    }
+    if (!so->state.attType.attbyval &&
+            DatumGetPointer(item->value) != NULL) {
+        elog(WARNING, "pfree == %d", item->value);
+        pfree(DatumGetPointer(item->value));
+    }
+
+    elog(WARNING, "pfree == %d", item);
+	pfree(item);
+}
+
 /* Point-box distance in the assumption that box is aligned by axis */
 double dist_pb_simplified(Datum p, Datum b) {
 	Point *point = DatumGetPointP(p);

@@ -40,6 +40,9 @@ extern void
 spg_point_distance(Datum to, int norderbys, 
         ScanKey orderbyKeys, double **distances, bool isLeaf); 
 
+extern void
+freeSearchTreeItem(SpGistScanOpaque so, SpGistSearchItem *item);
+
 extern double pb_dist_simplified(Datum p, Datum b);
 
 

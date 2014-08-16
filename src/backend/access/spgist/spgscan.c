@@ -29,26 +29,6 @@ extern double get_float8_infinity();
 typedef void (*storeRes_func) (SpGistScanOpaque so, ItemPointer heapPtr,
 								 Datum leafValue, bool isnull, bool recheck);
 
-static void
-freeSearchTreeItem(SpGistScanOpaque so, SpGistSearchItem *item)
-{
-    elog(WARNING, "suppLen == %d", so->state.config.suppLen);
-	if (so->state.config.suppLen > 0
-            && DatumGetPointer(item->suppValue) != NULL
-            && item->itemState == INNER) {
-        elog(WARNING, "pfree == %d", item->suppValue);
-		pfree(DatumGetPointer(item->suppValue));
-    }
-    if (!so->state.attType.attbyval &&
-            DatumGetPointer(item->value) != NULL) {
-        elog(WARNING, "pfree == %d", item->value);
-        pfree(DatumGetPointer(item->value));
-    }
-
-    elog(WARNING, "pfree == %d", item);
-	pfree(item);
-}
-
 /*
  * Initialize queue to search the root page, resetting
  * any previously active scan
@@ -682,6 +662,7 @@ redirect:
 		UnlockReleaseBuffer(buffer);
     elog(WARNING, "SpgWalk: exit");
 }
+
 
 /* storeRes subroutine for getbitmap case */
 static void
