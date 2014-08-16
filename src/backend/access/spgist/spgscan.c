@@ -628,7 +628,7 @@ redirect:
                     elog(WARNING, "SpgWalk: copy suppvalues, i == %d", i);
 					if (out.suppValues) {
 						newItem->suppValue = 
-							datumCopy(out.suppValues[nodeN], false,
+							datumCopy(out.suppValues[i], false,
 									  so->state.config.suppLen);
 					} else {
 						newItem->suppValue = (Datum) 0;
@@ -636,7 +636,7 @@ redirect:
 					
                     elog(WARNING, "SpgWalk: copy distances, i == %d", i);
 					if (out.distances != NULL) {
-						distances = out.distances[nodeN];
+						distances = out.distances[i];
 					} else {
 						distances = inf_distances;
 					}
