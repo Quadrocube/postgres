@@ -255,7 +255,7 @@ SET enable_indexscan  = t;
 SET enable_bitmapscan = f;
 
 select count(*) from test_range_spgist where ir @> 'empty'::int4range;
---select count(*) from test_range_spgist where ir = int4range(10,20);
+select count(*) from test_range_spgist where ir = int4range(10,20);
 select count(*) from test_range_spgist where ir @> 10;
 select count(*) from test_range_spgist where ir @> int4range(10,20);
 select count(*) from test_range_spgist where ir && int4range(10,20);
