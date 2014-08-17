@@ -284,7 +284,7 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 	Datum leafValue;
 	bool recheck;
 	/* use temp context for calling leaf_consistent */
-	MemoryContext = oldCtx = MemoryContextSwitchTo(so->tempCxt);
+	MemoryContext oldCtx = MemoryContextSwitchTo(so->tempCxt);
 
 	if (isnull)
 	{
