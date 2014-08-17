@@ -16,6 +16,8 @@
 #define SPGISTSearchItemIsHeap(item)	((item).itemState == HEAP_RECHECK \
                                       || (item).itemState == HEAP_NORECHECK)
 
+extern double get_float8_infinity();
+
 extern int
 SpGistSearchTreeItemComparator(const RBNode *a, const RBNode *b, void *arg);
 

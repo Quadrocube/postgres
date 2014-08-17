@@ -24,8 +24,6 @@
 #include "utils/rel.h"
 #include "access/spgist_proc.h"
 
-extern double get_float8_infinity();
-
 typedef void (*storeRes_func) (SpGistScanOpaque so, ItemPointer heapPtr,
 								 Datum leafValue, bool isnull, bool recheck);
 
@@ -244,6 +242,9 @@ spgendscan(PG_FUNCTION_ARGS)
 	SpGistScanOpaque so = (SpGistScanOpaque) scan->opaque;
 
 	MemoryContextDelete(so->tempCxt);
+	MemoryContextDelete(so->queueCxt);
+	pfree(so->tmpTreeItem);
+	if(scan->numberOfOrderBys > 0) pfree(so->distances);
 
 	PG_RETURN_VOID();
 }
@@ -390,8 +391,10 @@ init:
 		{
 			so->curTreeItem = (SpGistSearchTreeItem *) rb_leftmost(so->queue);
 			/* Done when tree is empty */
-			if (so->curTreeItem == NULL)
+			if (so->curTreeItem == NULL) {
+                if (buffer != InvalidBuffer) UnlockReleaseBuffer(buffer);
 				return;
+            }
 		}
 
 		item = so->curTreeItem->head;
@@ -632,8 +635,9 @@ redirect:
 		MemoryContextReset(so->tempCxt);
 	}
 
-	if (buffer != InvalidBuffer)
+	if (buffer != InvalidBuffer) {
 		UnlockReleaseBuffer(buffer);
+	}
 }
 
 
