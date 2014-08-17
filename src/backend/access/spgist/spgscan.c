@@ -342,6 +342,104 @@ report:
 	return result;
 }
 
+void spgInnerTest(Relation index, IndexScanDesc scan, SpGistSearchItem *item, 
+        SpGistInnerTuple innerTuple, bool isnull) {
+    spgInnerConsistentIn in;
+    spgInnerConsistentOut out;
+    FmgrInfo   *consistent_procinfo;
+    SpGistNodeTuple *nodes;
+    SpGistNodeTuple node;
+    int	i;
+    SpGistScanOpaque so = scan->opaque;
+    MemoryContext oldCxt = MemoryContextSwitchTo(so->tempCxt);
+    double *inf_distances = palloc(scan->numberOfOrderBys * sizeof (double));
+    for (i = 0; i < scan->numberOfOrderBys; ++i)
+        inf_distances[i] = get_float8_infinity();
+
+    inner_consistent_input_init(&in, scan, item, innerTuple);
+
+    /* collect node pointers */
+    nodes = (SpGistNodeTuple *) palloc(sizeof(SpGistNodeTuple) * in.nNodes);
+    SGITITERATE(innerTuple, i, node)
+    {
+        nodes[i] = node;
+    }
+
+    memset(&out, 0, sizeof(out));
+
+    if (!isnull)
+    {
+        /* use user-defined inner consistent method */
+        consistent_procinfo = index_getprocinfo(index, 1, SPGIST_INNER_CONSISTENT_PROC);
+        FunctionCall2Coll(consistent_procinfo,
+                index->rd_indcollation[0],
+                PointerGetDatum(&in),
+                PointerGetDatum(&out));
+    }
+    else
+    {
+        /* force all children to be visited */
+        out.nNodes = in.nNodes;
+        out.nodeNumbers = (int *) palloc(sizeof(int) * in.nNodes);
+        for (i = 0; i < in.nNodes; i++) {
+            out.nodeNumbers[i] = i;
+        }
+    }
+
+    MemoryContextSwitchTo(so->queueCxt);
+
+    /* If allTheSame, they should all or none of 'em match */
+    if (innerTuple->allTheSame)
+        if (out.nNodes != 0 && out.nNodes != in.nNodes)
+            elog(ERROR, "inconsistent inner_consistent results for allTheSame inner tuple");
+
+    for (i = 0; i < out.nNodes; i++)
+    {
+        int			nodeN = out.nodeNumbers[i];
+
+        Assert(nodeN >= 0 && nodeN < in.nNodes);
+        if (ItemPointerIsValid(&nodes[nodeN]->t_tid))
+        {
+            double *distances;
+            SpGistSearchItem *newItem;
+
+            /* Create new work item for this node */
+            newItem = palloc(sizeof(SpGistSearchItem));
+            newItem->heap = nodes[nodeN]->t_tid;
+            if (out.levelAdds)
+                newItem->level = item->level + out.levelAdds[i];
+            else
+                newItem->level = item->level;
+            /* Must copy value out of temp context */
+            if (out.reconstructedValues) {
+                newItem->value =
+                    datumCopy(out.reconstructedValues[i],
+                            so->state.attType.attbyval,
+                            so->state.attType.attlen);
+            } else {
+                newItem->value = (Datum) 0;
+            }
+
+            if (out.suppValues) {
+                newItem->suppValue = 
+                    datumCopy(out.suppValues[i], false,
+                            so->state.config.suppLen);
+            } else {
+                newItem->suppValue = (Datum) 0;
+            }
+
+            if (out.distances != NULL) {
+                distances = out.distances[i];
+            } else {
+                distances = inf_distances;
+            }
+            newItem->itemState = INNER;
+            addSearchItemToQueue(scan, newItem, distances);
+        }
+    }
+    MemoryContextSwitchTo(oldCxt);
+}
+
 void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan, 
 			SpGistSearchItem *item, SpGistInnerTuple innerTuple) {
 	SpGistScanOpaque so = scan->opaque;
@@ -406,7 +504,6 @@ spgWalk(Relation index, IndexScanDesc scan, bool scanWholeIndex,
 {
 	Buffer		buffer = InvalidBuffer;
 	bool		reportedSome = false;
-	MemoryContext oldCxt;
 	SpGistScanOpaque so = (SpGistScanOpaque) scan->opaque;
 	
 	while (scanWholeIndex || !reportedSome) {
@@ -523,15 +620,8 @@ redirect:
 		}
 		else	/* page is inner */
 		{
-			SpGistInnerTuple innerTuple;
-			spgInnerConsistentIn in;
-			spgInnerConsistentOut out;
-			FmgrInfo   *consistent_procinfo;
-			SpGistNodeTuple *nodes;
-			SpGistNodeTuple node;
-			int	i;
-
-			innerTuple = (SpGistInnerTuple) PageGetItem(page,
+			SpGistInnerTuple innerTuple = 
+                (SpGistInnerTuple) PageGetItem(page,
 												PageGetItemId(page, offset));
 
 			if (innerTuple->tupstate != SPGIST_LIVE)
@@ -548,94 +638,8 @@ redirect:
 			}
 
 			/* use temp context for calling inner_consistent */
-			oldCxt = MemoryContextSwitchTo(so->tempCxt);
-			
-			inner_consistent_input_init(&in, scan, item, innerTuple);
-			double *inf_distances = palloc(scan->numberOfOrderBys * sizeof (double));
-			for (i = 0; i < scan->numberOfOrderBys; ++i)
-				inf_distances[i] = get_float8_infinity();
-
-			/* collect node pointers */
-			nodes = (SpGistNodeTuple *) palloc(sizeof(SpGistNodeTuple) * in.nNodes);
-			SGITITERATE(innerTuple, i, node)
-			{
-				nodes[i] = node;
-			}
-
-			memset(&out, 0, sizeof(out));
-
-			if (!isnull)
-			{
-				/* use user-defined inner consistent method */
-				consistent_procinfo = index_getprocinfo(index, 1, SPGIST_INNER_CONSISTENT_PROC);
-				FunctionCall2Coll(consistent_procinfo,
-								  index->rd_indcollation[0],
-								  PointerGetDatum(&in),
-								  PointerGetDatum(&out));
-			}
-			else
-			{
-				/* force all children to be visited */
-				out.nNodes = in.nNodes;
-				out.nodeNumbers = (int *) palloc(sizeof(int) * in.nNodes);
-				for (i = 0; i < in.nNodes; i++) {
-					out.nodeNumbers[i] = i;
-				}
-			}
-
-			MemoryContextSwitchTo(so->queueCxt);
-
-			/* If allTheSame, they should all or none of 'em match */
-			if (innerTuple->allTheSame)
-				if (out.nNodes != 0 && out.nNodes != in.nNodes)
-					elog(ERROR, "inconsistent inner_consistent results for allTheSame inner tuple");
-
-			for (i = 0; i < out.nNodes; i++)
-			{
-				int			nodeN = out.nodeNumbers[i];
-
-				Assert(nodeN >= 0 && nodeN < in.nNodes);
-				if (ItemPointerIsValid(&nodes[nodeN]->t_tid))
-				{
-					double *distances;
-					SpGistSearchItem *newItem;
-
-					/* Create new work item for this node */
-					newItem = palloc(sizeof(SpGistSearchItem));
-					newItem->heap = nodes[nodeN]->t_tid;
-					if (out.levelAdds)
-						newItem->level = item->level + out.levelAdds[i];
-					else
-						newItem->level = item->level;
-					/* Must copy value out of temp context */
-					if (out.reconstructedValues) {
-						newItem->value =
-							datumCopy(out.reconstructedValues[i],
-									  so->state.attType.attbyval,
-									  so->state.attType.attlen);
-					} else {
-						newItem->value = (Datum) 0;
-					}
-					
-					if (out.suppValues) {
-						newItem->suppValue = 
-							datumCopy(out.suppValues[i], false,
-									  so->state.config.suppLen);
-					} else {
-						newItem->suppValue = (Datum) 0;
-					}
-					
-					if (out.distances != NULL) {
-						distances = out.distances[i];
-					} else {
-						distances = inf_distances;
-					}
-					newItem->itemState = INNER;
-					addSearchItemToQueue(scan, newItem, distances);
-				}
-			}
-			MemoryContextSwitchTo(oldCxt);
-		}
+            spgInnerTest(index, scan, item, innerTuple, isnull);
+        }
 
 		/* done with this scan entry */
 		freeSearchTreeItem(so, item);
