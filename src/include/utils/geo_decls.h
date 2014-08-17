@@ -34,7 +34,7 @@
 
 #ifdef EPSILON
 #define FPzero(A)				(fabs(A) <= EPSILON)
-#define FPeq(A,B)				(fabs((A) - (B)) <= EPSILON) 
+#define FPeq(A,B)				(fabs((A) - (B)) <= EPSILON)
 #define FPne(A,B)				(fabs((A) - (B)) > EPSILON)
 #define FPlt(A,B)				((B) - (A) > EPSILON)
 #define FPle(A,B)				((A) - (B) <= EPSILON)
