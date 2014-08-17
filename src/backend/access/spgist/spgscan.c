@@ -360,6 +360,39 @@ void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan,
 	in->suppValue = item->suppValue;
 }
 
+SpGistSearchItem *getNextQueueItem(SpGistScanOpaque so) {
+    MemoryContext oldCxt = MemoryContextSwitchTo(so->queueCxt);
+    SpGistSearchItem *item = NULL;
+
+    while (item == NULL) {
+        /* Update curTreeItem if we don't have one */
+        if (so->curTreeItem == NULL)
+        {
+            so->curTreeItem = (SpGistSearchTreeItem *) rb_leftmost(so->queue);
+            /* Done when tree is empty */
+            if (so->curTreeItem == NULL) {
+                break;
+            }
+        }
+
+        item = so->curTreeItem->head;
+        if (item != NULL)
+        {
+            /* Delink item from chain */
+            so->curTreeItem->head = item->next;
+            if (item == so->curTreeItem->lastHeap)
+                so->curTreeItem->lastHeap = NULL;
+        } else {
+            /* curTreeItem is exhausted, so remove it from rbtree */
+            rb_delete(so->queue, (RBNode *) so->curTreeItem);
+            so->curTreeItem = NULL;
+        }
+    }
+    
+    MemoryContextSwitchTo(oldCxt);
+    return item;
+}
+
 /*
  * Walk the tree and report all tuples passing the scan quals to the storeRes
  * subroutine.
@@ -382,37 +415,14 @@ spgWalk(Relation index, IndexScanDesc scan, bool scanWholeIndex,
 		Page		page;
 		bool		isnull;
 
-		SpGistSearchItem *item;
+		SpGistSearchItem *item = getNextQueueItem(so);
+        if (item == NULL) {
+            /* No more items in queue -> done */
+            if (buffer != InvalidBuffer) 
+                UnlockReleaseBuffer(buffer);
+            return;
+        }
 
-		oldCxt = MemoryContextSwitchTo(so->queueCxt);
-init:
-		/* Update curTreeItem if we don't have one */
-		if (so->curTreeItem == NULL)
-		{
-			so->curTreeItem = (SpGistSearchTreeItem *) rb_leftmost(so->queue);
-			/* Done when tree is empty */
-			if (so->curTreeItem == NULL) {
-                if (buffer != InvalidBuffer) UnlockReleaseBuffer(buffer);
-				return;
-            }
-		}
-
-		item = so->curTreeItem->head;
-		if (item != NULL)
-		{
-			/* Delink item from chain */
-			so->curTreeItem->head = item->next;
-			if (item == so->curTreeItem->lastHeap)
-				so->curTreeItem->lastHeap = NULL;
-		} else {
-		    /* curTreeItem is exhausted, so remove it from rbtree */
-			rb_delete(so->queue, (RBNode *) so->curTreeItem);
-			so->curTreeItem = NULL;
-			goto init;
-		}
-		
-
-		MemoryContextSwitchTo(oldCxt);
 redirect:
 		/* Check for interrupts, just in case of infinite loop */
 		CHECK_FOR_INTERRUPTS();
@@ -628,16 +638,13 @@ redirect:
 		}
 
 		/* done with this scan entry */
-		oldCxt = MemoryContextSwitchTo(so->queueCxt);
 		freeSearchTreeItem(so, item);
-		MemoryContextSwitchTo(oldCxt);
 		/* clear temp context before proceeding to the next one */
 		MemoryContextReset(so->tempCxt);
 	}
 
-	if (buffer != InvalidBuffer) {
-		UnlockReleaseBuffer(buffer);
-	}
+	if (buffer != InvalidBuffer) 
+        UnlockReleaseBuffer(buffer);
 }
 
 
