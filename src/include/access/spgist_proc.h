@@ -18,6 +18,14 @@
 
 extern double get_float8_infinity();
 
+void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan, 
+			SpGistSearchItem *item, SpGistInnerTuple innerTuple);
+
+void spgInnerTest(Relation index, IndexScanDesc scan, SpGistSearchItem *item, 
+        SpGistInnerTuple innerTuple, bool isnull);
+
+SpGistSearchItem *getNextQueueItem(SpGistScanOpaque so);
+
 extern int
 SpGistSearchTreeItemComparator(const RBNode *a, const RBNode *b, void *arg);
 
@@ -45,7 +53,7 @@ spg_point_distance(Datum to, int norderbys,
 extern void
 freeSearchTreeItem(SpGistScanOpaque so, SpGistSearchItem *item);
 
-extern double pb_dist_simplified(Datum p, Datum b);
+extern double dist_pb_simplified(Datum p, Datum b);
 
 
 #ifdef	__cplusplus

@@ -139,8 +139,9 @@ spg_point_distance(Datum to, int norderbys,
         ScanKey orderbyKeys, double **distances, bool isLeaf) 
 {
     int sk_num;
+    double *distance;
     *distances = malloc(norderbys * sizeof (double *));
-    double *distance = *distances;
+    *distance = *distances;
     for (sk_num = 0; sk_num < norderbys; ++sk_num) {
         Datum from_point = orderbyKeys[sk_num].sk_argument;
         if (isLeaf) {

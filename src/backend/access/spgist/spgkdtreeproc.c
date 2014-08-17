@@ -161,11 +161,11 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 {
 	spgInnerConsistentIn *in = (spgInnerConsistentIn *) PG_GETARG_POINTER(0);
 	spgInnerConsistentOut *out = (spgInnerConsistentOut *) PG_GETARG_POINTER(1);
-    out->distances = NULL;
 	double		coord;
 	int			which;
 	int			i;
-    Datum *boxes;
+    Datum *boxes = NULL;
+    out->distances = NULL;
 
 	Assert(in->hasPrefix);
 	coord = DatumGetFloat8(in->prefixDatum);
@@ -269,12 +269,12 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
         in->suppValue = PointerGetDatum(newbox);
     }
     if (DatumGetBoxP(in->suppValue) != NULL) {
-		boxes = (Datum *) palloc(sizeof(Datum) * 2);
-		out->suppValues = (Datum *) palloc(sizeof(Datum) * 2);
+		Point p1, p2;
 		BOX *area = DatumGetBoxP(in->suppValue);
 		BOX *newbox1 = (BOX *) palloc0(sizeof(BOX));
 		BOX *newbox2 = (BOX *) palloc0(sizeof(BOX));
-		Point p1, p2;
+		boxes = (Datum *) palloc(sizeof(Datum) * 2);
+		out->suppValues = (Datum *) palloc(sizeof(Datum) * 2);
 		switch (in->level % 2) {
             case 0:
 				p1.x = p2.x = coord;
@@ -299,7 +299,7 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 	{
 		if (which & (1 << i)) {
 			out->nodeNumbers[out->nNodes++] = i - 1;
-            if (in->suppValue != 0) {
+            if (DatumGetBoxP(in->suppValue) != NULL) {
                 out->suppValues[out->nNodes-1] = boxes[i];
             }
 			if (in->norderbys > 0) {
