@@ -40,7 +40,7 @@ spg_kd_config(PG_FUNCTION_ARGS)
 static int
 getSide(double coord, bool isX, Point *tst)
 {
-	double		tstcoord = (isX) ? tst->x : tst->y;
+	double tstcoord = (isX) ? tst->x : tst->y;
 
 	if (coord == tstcoord)
 		return 0;
@@ -55,8 +55,8 @@ spg_kd_choose(PG_FUNCTION_ARGS)
 {
 	spgChooseIn *in = (spgChooseIn *) PG_GETARG_POINTER(0);
 	spgChooseOut *out = (spgChooseOut *) PG_GETARG_POINTER(1);
-	Point	   *inPoint = DatumGetPointP(in->datum);
-	double		coord;
+	Point *inPoint = DatumGetPointP(in->datum);
+	double coord;
 
 	if (in->allTheSame)
 		elog(ERROR, "allTheSame should not occur for k-d trees");
@@ -77,8 +77,8 @@ spg_kd_choose(PG_FUNCTION_ARGS)
 
 typedef struct SortedPoint
 {
-	Point	   *p;
-	int			i;
+	Point *p;
+	int i;
 } SortedPoint;
 
 static int
@@ -109,10 +109,10 @@ spg_kd_picksplit(PG_FUNCTION_ARGS)
 {
 	spgPickSplitIn *in = (spgPickSplitIn *) PG_GETARG_POINTER(0);
 	spgPickSplitOut *out = (spgPickSplitOut *) PG_GETARG_POINTER(1);
-	int			i;
-	int			middle;
+	int i;
+	int middle;
 	SortedPoint *sorted;
-	double		coord;
+	double coord;
 
 	sorted = palloc(sizeof(*sorted) * in->nTuples);
 	for (i = 0; i < in->nTuples; i++)
@@ -146,8 +146,8 @@ spg_kd_picksplit(PG_FUNCTION_ARGS)
 	 */
 	for (i = 0; i < in->nTuples; i++)
 	{
-		Point	   *p = sorted[i].p;
-		int			n = sorted[i].i;
+		Point *p = sorted[i].p;
+		int n = sorted[i].i;
 
 		out->mapTuplesToNodes[n] = (i < middle) ? 0 : 1;
 		out->leafTupleDatums[n] = PointPGetDatum(p);
@@ -161,9 +161,9 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 {
 	spgInnerConsistentIn *in = (spgInnerConsistentIn *) PG_GETARG_POINTER(0);
 	spgInnerConsistentOut *out = (spgInnerConsistentOut *) PG_GETARG_POINTER(1);
-	double		coord;
-	int			which;
-	int			i;
+	double coord;
+	int which;
+	int i;
     Datum *boxes = NULL;
     out->distances = NULL;
 
@@ -175,7 +175,8 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 
 	Assert(in->nNodes == 2);
 
-	if (in->norderbys > 0) {
+	if (in->norderbys > 0)
+    {
 		out->distances = palloc(in->nNodes * sizeof (double *));
 	}
 	
@@ -184,8 +185,8 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 
 	for (i = 0; i < in->nkeys; i++)
 	{
-		Point	   *query = DatumGetPointP(in->scankeys[i].sk_argument);
-		BOX		   *boxQuery;
+		Point *query = DatumGetPointP(in->scankeys[i].sk_argument);
+		BOX *boxQuery;
 
 		switch (in->scankeys[i].sk_strategy)
 		{
@@ -259,7 +260,8 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 	out->nodeNumbers = (int *) palloc(sizeof(int) * 2);
 	out->nNodes = 0;
 	
-	if (in->level == 0 && in->norderbys > 0) {
+	if (in->level == 0 && in->norderbys > 0)
+    {
         BOX *newbox = palloc(sizeof(BOX));
         Point newp;
         newp.x = newp.y = get_float8_infinity();
@@ -268,14 +270,16 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
         newbox->low = newp;
         in->suppValue = PointerGetDatum(newbox);
     }
-    if (DatumGetBoxP(in->suppValue) != NULL) {
+    if (DatumGetBoxP(in->suppValue) != NULL)
+    {
 		Point p1, p2;
 		BOX *area = DatumGetBoxP(in->suppValue);
 		BOX *newbox1 = (BOX *) palloc0(sizeof(BOX));
 		BOX *newbox2 = (BOX *) palloc0(sizeof(BOX));
 		boxes = (Datum *) palloc(sizeof(Datum) * 2);
 		out->suppValues = (Datum *) palloc(sizeof(Datum) * 2);
-		switch (in->level % 2) {
+		switch (in->level % 2)
+        {
             case 0:
 				p1.x = p2.x = coord;
 				p1.y = area->high.y;
@@ -297,12 +301,15 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 	
 	for (i = 1; i <= 2; i++)
 	{
-		if (which & (1 << i)) {
+		if (which & (1 << i))
+        {
 			out->nodeNumbers[out->nNodes++] = i - 1;
-            if (DatumGetBoxP(in->suppValue) != NULL) {
+            if (DatumGetBoxP(in->suppValue) != NULL)
+            {
                 out->suppValues[out->nNodes-1] = boxes[i];
             }
-			if (in->norderbys > 0) {
+			if (in->norderbys > 0)
+            {
 				spg_point_distance(out->suppValues[out->nNodes-1],
 					in->norderbys, in->orderbyKeys, &out->distances[out->nNodes-1], false);
 			}

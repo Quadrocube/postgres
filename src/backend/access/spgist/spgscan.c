@@ -67,7 +67,7 @@ resetSpGistScanOpaque(IndexScanDesc scan)
 	if (so->want_itup)
 	{
 		/* Must pfree IndexTuples to avoid memory leak */
-		int			i;
+		int i;
 
 		for (i = 0; i < so->nPtrs; i++)
 			pfree(so->indexTups[i]);
@@ -81,7 +81,7 @@ resetSpGistScanOpaque(IndexScanDesc scan)
  * Sets searchNulls, searchNonNulls, numberOfKeys, keyData fields of *so.
  *
  * The point here is to eliminate null-related considerations from what the
- * opclass consistent functions need to deal with.  We assume all SPGiST-
+ * opclass consistent functions need to deal with.	We assume all SPGiST-
  * indexable operators are strict, so any null RHS value makes the scan
  * condition unsatisfiable.  We also pull out any IS NULL/IS NOT NULL
  * conditions; their effect is reflected into searchNulls/searchNonNulls.
@@ -90,11 +90,11 @@ static void
 spgPrepareScanKeys(IndexScanDesc scan)
 {
 	SpGistScanOpaque so = (SpGistScanOpaque) scan->opaque;
-	bool		qual_ok;
-	bool		haveIsNull;
-	bool		haveNotNull;
-	int			nkeys;
-	int			i;
+	bool qual_ok;
+	bool haveIsNull;
+	bool haveNotNull;
+	int nkeys;
+	int i;
 
 	if (scan->numberOfKeys <= 0)
 	{
@@ -111,7 +111,7 @@ spgPrepareScanKeys(IndexScanDesc scan)
 	nkeys = 0;
 	for (i = 0; i < scan->numberOfKeys; i++)
 	{
-		ScanKey		skey = &scan->keyData[i];
+		ScanKey skey = &scan->keyData[i];
 
 		if (skey->sk_flags & SK_SEARCHNULL)
 			haveIsNull = true;
@@ -154,9 +154,9 @@ spgPrepareScanKeys(IndexScanDesc scan)
 Datum
 spgbeginscan(PG_FUNCTION_ARGS)
 {
-	Relation	rel = (Relation) PG_GETARG_POINTER(0);
-	int			keysz = PG_GETARG_INT32(1);
-	int			orderbys = PG_GETARG_INT32(2);
+	Relation rel = (Relation) PG_GETARG_POINTER(0);
+	int keysz = PG_GETARG_INT32(1);
+	int orderbys = PG_GETARG_INT32(2);
 
 	IndexScanDesc scan;
 	SpGistScanOpaque so;
@@ -197,8 +197,8 @@ spgrescan(PG_FUNCTION_ARGS)
 {
 	IndexScanDesc scan = (IndexScanDesc) PG_GETARG_POINTER(0);
 	SpGistScanOpaque so = (SpGistScanOpaque) scan->opaque;
-	ScanKey		scankeys = (ScanKey) PG_GETARG_POINTER(1);
-	ScanKey		orderbys = (ScanKey) PG_GETARG_POINTER(3);
+	ScanKey scankeys = (ScanKey) PG_GETARG_POINTER(1);
+	ScanKey orderbys = (ScanKey) PG_GETARG_POINTER(3);
 	
 	MemoryContext oldCxt;
 
@@ -224,7 +224,7 @@ spgrescan(PG_FUNCTION_ARGS)
 	
 	/* set up starting queue entries */
 	resetSpGistScanOpaque(scan);
-    so->curTreeItem = NULL;
+	so->curTreeItem = NULL;
 	
 	if (orderbys && scan->numberOfOrderBys > 0)
 	{
@@ -275,11 +275,11 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 			int level, Datum reconstructedValue,
 			bool *reportedSome, storeRes_func storeRes)
 {
-	bool		result;
-	Datum		leafDatum;
+	bool result;
+	Datum leafDatum;
 	spgLeafConsistentIn in;
 	spgLeafConsistentOut out;
-	FmgrInfo   *procinfo;
+	FmgrInfo *procinfo;
 	SpGistScanOpaque so = scan->opaque;
 	Datum leafValue;
 	bool recheck;
@@ -292,7 +292,7 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 		Assert(so->searchNulls);
 		leafValue = (Datum) 0;
 		recheck = false;
-        result = true;
+		result = true;
 		goto report;
 	}
 
@@ -319,11 +319,14 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 	leafValue = out.leafValue;
 	
 report:
-	if (result) {
+	if (result)
+	{
 		/* item passes the scankeys */
-		if (scan->numberOfOrderBys > 0) {
+		if (scan->numberOfOrderBys > 0)
+		{
 			/* the scan is ordered -> add the item to the queue */
-			if (isnull) {
+			if (isnull)
+			{
 				/* Assume that all distances for null entries are infinities */
 				int i;
 				out.distances = palloc(scan->numberOfOrderBys * sizeof(double));
@@ -334,7 +337,9 @@ report:
 			addSearchItemToQueue(scan,
 				newHeapItem(so, level, leafTuple->heapPtr, leafValue, recheck), 
 				out.distances);
-		} else {
+		}
+		else
+		{
 			/* non-ordered scan, so report the item right away */
 			MemoryContextSwitchTo(oldCtx);
 			storeRes(so, &leafTuple->heapPtr, leafValue, isnull, recheck);
@@ -347,107 +352,119 @@ report:
 }
 
 void spgInnerTest(Relation index, IndexScanDesc scan, SpGistSearchItem *item, 
-        SpGistInnerTuple innerTuple, bool isnull) {
-    spgInnerConsistentIn in;
-    spgInnerConsistentOut out;
-    FmgrInfo   *consistent_procinfo;
-    SpGistNodeTuple *nodes;
-    SpGistNodeTuple node;
-    int	i;
-    SpGistScanOpaque so = scan->opaque;
-    MemoryContext oldCxt = MemoryContextSwitchTo(so->tempCxt);
-    double *inf_distances = palloc(scan->numberOfOrderBys * sizeof (double));
-    for (i = 0; i < scan->numberOfOrderBys; ++i)
-        inf_distances[i] = get_float8_infinity();
+		SpGistInnerTuple innerTuple, bool isnull)
+{
+	spgInnerConsistentIn in;
+	spgInnerConsistentOut out;
+	FmgrInfo *consistent_procinfo;
+	SpGistNodeTuple *nodes;
+	SpGistNodeTuple node;
+	int	i;
+	SpGistScanOpaque so = scan->opaque;
+	MemoryContext oldCxt = MemoryContextSwitchTo(so->tempCxt);
+	double *inf_distances = palloc(scan->numberOfOrderBys * sizeof (double));
+	for (i = 0; i < scan->numberOfOrderBys; ++i)
+		inf_distances[i] = get_float8_infinity();
 
-    inner_consistent_input_init(&in, scan, item, innerTuple);
+	inner_consistent_input_init(&in, scan, item, innerTuple);
 
-    /* collect node pointers */
-    nodes = (SpGistNodeTuple *) palloc(sizeof(SpGistNodeTuple) * in.nNodes);
-    SGITITERATE(innerTuple, i, node)
-    {
-        nodes[i] = node;
-    }
+	/* collect node pointers */
+	nodes = (SpGistNodeTuple *) palloc(sizeof(SpGistNodeTuple) * in.nNodes);
+	SGITITERATE(innerTuple, i, node)
+	{
+		nodes[i] = node;
+	}
 
-    memset(&out, 0, sizeof(out));
+	memset(&out, 0, sizeof(out));
 
-    if (!isnull)
-    {
-        /* use user-defined inner consistent method */
-        consistent_procinfo = index_getprocinfo(index, 1, SPGIST_INNER_CONSISTENT_PROC);
-        FunctionCall2Coll(consistent_procinfo,
-                index->rd_indcollation[0],
-                PointerGetDatum(&in),
-                PointerGetDatum(&out));
-    }
-    else
-    {
-        /* force all children to be visited */
-        out.nNodes = in.nNodes;
-        out.nodeNumbers = (int *) palloc(sizeof(int) * in.nNodes);
-        for (i = 0; i < in.nNodes; i++) {
-            out.nodeNumbers[i] = i;
-        }
-    }
+	if (!isnull)
+	{
+		/* use user-defined inner consistent method */
+		consistent_procinfo = index_getprocinfo(index, 1, SPGIST_INNER_CONSISTENT_PROC);
+		FunctionCall2Coll(consistent_procinfo,
+			index->rd_indcollation[0],
+			PointerGetDatum(&in),
+			PointerGetDatum(&out));
+	}
+	else
+	{
+		/* force all children to be visited */
+		out.nNodes = in.nNodes;
+		out.nodeNumbers = (int *) palloc(sizeof(int) * in.nNodes);
+		for (i = 0; i < in.nNodes; i++)
+		{
+			out.nodeNumbers[i] = i;
+		}
+	}
 
-    MemoryContextSwitchTo(so->queueCxt);
+	MemoryContextSwitchTo(so->queueCxt);
 
-    /* If allTheSame, they should all or none of 'em match */
-    if (innerTuple->allTheSame)
-        if (out.nNodes != 0 && out.nNodes != in.nNodes)
-            elog(ERROR, "inconsistent inner_consistent results for allTheSame inner tuple");
+	/* If allTheSame, they should all or none of 'em match */
+	if (innerTuple->allTheSame)
+		if (out.nNodes != 0 && out.nNodes != in.nNodes)
+			elog(ERROR, "inconsistent inner_consistent results for allTheSame inner tuple");
 
-    for (i = 0; i < out.nNodes; i++)
-    {
-        int			nodeN = out.nodeNumbers[i];
+	for (i = 0; i < out.nNodes; i++)
+	{
+		int nodeN = out.nodeNumbers[i];
 
-        Assert(nodeN >= 0 && nodeN < in.nNodes);
-        if (ItemPointerIsValid(&nodes[nodeN]->t_tid))
-        {
-            double *distances;
-            SpGistSearchItem *newItem;
+		Assert(nodeN >= 0 && nodeN < in.nNodes);
+		if (ItemPointerIsValid(&nodes[nodeN]->t_tid))
+		{
+			double *distances;
+			SpGistSearchItem *newItem;
 
-            /* Create new work item for this node */
-            newItem = palloc(sizeof(SpGistSearchItem));
-            newItem->heap = nodes[nodeN]->t_tid;
-            if (out.levelAdds)
-                newItem->level = item->level + out.levelAdds[i];
-            else
-                newItem->level = item->level;
-            /* Must copy value out of temp context */
-            if (out.reconstructedValues) {
-                newItem->value =
-                    datumCopy(out.reconstructedValues[i],
-                            so->state.attType.attbyval,
-                            so->state.attType.attlen);
-            } else {
-                newItem->value = (Datum) 0;
-            }
+			/* Create new work item for this node */
+			newItem = palloc(sizeof(SpGistSearchItem));
+			newItem->heap = nodes[nodeN]->t_tid;
+			if (out.levelAdds)
+				newItem->level = item->level + out.levelAdds[i];
+			else
+				newItem->level = item->level;
+			/* Must copy value out of temp context */
+			if (out.reconstructedValues)
+			{
+				newItem->value =
+					datumCopy(out.reconstructedValues[i],
+							so->state.attType.attbyval,
+							so->state.attType.attlen);
+			}
+			else
+			{
+				newItem->value = (Datum) 0;
+			}
 
-            if (out.suppValues) {
-                newItem->suppValue = 
-                    datumCopy(out.suppValues[i], false,
-                            so->state.config.suppLen);
-            } else {
-                newItem->suppValue = (Datum) 0;
-            }
+			if (out.suppValues)
+			{
+				newItem->suppValue = 
+					datumCopy(out.suppValues[i], false,
+							so->state.config.suppLen);
+			}
+			else
+			{
+				newItem->suppValue = (Datum) 0;
+			}
 
-            if (out.distances != NULL) {
+			if (out.distances != NULL)
+			{
 				/* Will copy out the distances in addSearchItemToQueue anyway */
-                distances = out.distances[i];
-            } else {
-                distances = inf_distances;
-            }
-            newItem->itemState = INNER;
-            addSearchItemToQueue(scan, newItem, distances);
-        }
-    }
-    MemoryContextSwitchTo(oldCxt);
+				distances = out.distances[i];
+			}
+			else
+			{
+				distances = inf_distances;
+			}
+			newItem->itemState = INNER;
+			addSearchItemToQueue(scan, newItem, distances);
+		}
+	}
+	MemoryContextSwitchTo(oldCxt);
 }
 
 /* A bundle initializer for inner_consistent methods */
 void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan, 
-			SpGistSearchItem *item, SpGistInnerTuple innerTuple) {
+			SpGistSearchItem *item, SpGistInnerTuple innerTuple)
+{
 	SpGistScanOpaque so = scan->opaque;
 	in->scankeys = so->keyData;
 	in->nkeys = so->numberOfKeys;
@@ -460,42 +477,47 @@ void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan,
 	in->nNodes = innerTuple->nNodes;
 	in->nodeLabels = spgExtractNodeLabels(&so->state, innerTuple);
 	in->norderbys = scan->numberOfOrderBys;
-    in->orderbyKeys = scan->orderByData;
+	in->orderbyKeys = scan->orderByData;
 	in->suppValue = item->suppValue;
 }
 
 /* Returns a next item in an (ordered) scan or null if the index is exhausted */
-SpGistSearchItem *getNextQueueItem(SpGistScanOpaque so) {
-    MemoryContext oldCxt = MemoryContextSwitchTo(so->queueCxt);
-    SpGistSearchItem *item = NULL;
+SpGistSearchItem *getNextQueueItem(SpGistScanOpaque so)
+{
+	MemoryContext oldCxt = MemoryContextSwitchTo(so->queueCxt);
+	SpGistSearchItem *item = NULL;
 
-    while (item == NULL) {
-        /* Update curTreeItem if we don't have one */
-        if (so->curTreeItem == NULL)
-        {
-            so->curTreeItem = (SpGistSearchTreeItem *) rb_leftmost(so->queue);
-            /* Done when tree is empty */
-            if (so->curTreeItem == NULL) {
-                break;
-            }
-        }
+	while (item == NULL)
+	{
+		/* Update curTreeItem if we don't have one */
+		if (so->curTreeItem == NULL)
+		{
+			so->curTreeItem = (SpGistSearchTreeItem *) rb_leftmost(so->queue);
+			/* Done when tree is empty */
+			if (so->curTreeItem == NULL)
+			{
+				break;
+			}
+		}
 
-        item = so->curTreeItem->head;
-        if (item != NULL)
-        {
-            /* Delink item from chain */
-            so->curTreeItem->head = item->next;
-            if (item == so->curTreeItem->lastHeap)
-                so->curTreeItem->lastHeap = NULL;
-        } else {
-            /* curTreeItem is exhausted, so remove it from rbtree */
-            rb_delete(so->queue, (RBNode *) so->curTreeItem);
-            so->curTreeItem = NULL;
-        }
-    }
-    
-    MemoryContextSwitchTo(oldCxt);
-    return item;
+		item = so->curTreeItem->head;
+		if (item != NULL)
+		{
+			/* Delink item from chain */
+			so->curTreeItem->head = item->next;
+			if (item == so->curTreeItem->lastHeap)
+				so->curTreeItem->lastHeap = NULL;
+		}
+		else
+		{
+			/* curTreeItem is exhausted, so remove it from rbtree */
+			rb_delete(so->queue, (RBNode *) so->curTreeItem);
+			so->curTreeItem = NULL;
+		}
+	}
+	
+	MemoryContextSwitchTo(oldCxt);
+	return item;
 }
 
 /*
@@ -513,19 +535,21 @@ spgWalk(Relation index, IndexScanDesc scan, bool scanWholeIndex,
 	bool		reportedSome = false;
 	SpGistScanOpaque so = (SpGistScanOpaque) scan->opaque;
 	
-	while (scanWholeIndex || !reportedSome) {
+	while (scanWholeIndex || !reportedSome)
+	{
 		BlockNumber blkno;
 		OffsetNumber offset;
 		Page		page;
 		bool		isnull;
 
 		SpGistSearchItem *item = getNextQueueItem(so);
-        if (item == NULL) {
-            /* No more items in queue -> done */
-            if (buffer != InvalidBuffer) 
-                UnlockReleaseBuffer(buffer);
-            return;
-        }
+		if (item == NULL)
+		{
+			/* No more items in queue -> done */
+			if (buffer != InvalidBuffer) 
+				UnlockReleaseBuffer(buffer);
+			return;
+		}
 
 redirect:
 		/* Check for interrupts, just in case of infinite loop */
@@ -552,7 +576,8 @@ redirect:
 
 		isnull = SpGistPageStoresNulls(page) ? true : false;
 
-		if (SPGISTSearchItemIsHeap(*item)) {
+		if (SPGISTSearchItemIsHeap(*item))
+		{
 			/* We store heap items in the queue only in case of ordered search */
 			Assert(scan->numberOfOrderBys > 0);
 			/* Heap items can only be stored on leaf pages */
@@ -628,7 +653,7 @@ redirect:
 		else	/* page is inner */
 		{
 			SpGistInnerTuple innerTuple = 
-                (SpGistInnerTuple) PageGetItem(page,
+				(SpGistInnerTuple) PageGetItem(page,
 												PageGetItemId(page, offset));
 
 			if (innerTuple->tupstate != SPGIST_LIVE)
@@ -644,8 +669,8 @@ redirect:
 					 innerTuple->tupstate);
 			}
 
-            spgInnerTest(index, scan, item, innerTuple, isnull);
-        }
+			spgInnerTest(index, scan, item, innerTuple, isnull);
+		}
 
 		/* done with this scan entry */
 		freeSearchTreeItem(so, item);
@@ -654,7 +679,7 @@ redirect:
 	}
 
 	if (buffer != InvalidBuffer) 
-        UnlockReleaseBuffer(buffer);
+		UnlockReleaseBuffer(buffer);
 }
 
 
@@ -696,7 +721,7 @@ storeGettuple(SpGistScanOpaque so, ItemPointer heapPtr,
 	if (so->want_itup)
 	{
 		/*
-		 * Reconstruct desired IndexTuple.  We have to copy the datum out of
+		 * Reconstruct desired IndexTuple.	We have to copy the datum out of
 		 * the temp context anyway, so we may as well create the tuple here.
 		 */
 		so->indexTups[so->nPtrs] = index_form_tuple(so->indexTupDesc,
@@ -736,9 +761,10 @@ spggettuple(PG_FUNCTION_ARGS)
 			/* Must pfree IndexTuples to avoid memory leak */
 			int			i;
 
-			for (i = 0; i < so->nPtrs; i++) {
+			for (i = 0; i < so->nPtrs; i++)
+			{
 				pfree(so->indexTups[i]);
-            }
+			}
 		}
 		so->iPtr = so->nPtrs = 0;
 
@@ -754,7 +780,7 @@ spggettuple(PG_FUNCTION_ARGS)
 Datum
 spgcanreturn(PG_FUNCTION_ARGS)
 {
-	Relation	index = (Relation) PG_GETARG_POINTER(0);
+	Relation index = (Relation) PG_GETARG_POINTER(0);
 	SpGistCache *cache;
 
 	/* We can do it if the opclass config function says so */

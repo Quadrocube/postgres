@@ -85,8 +85,7 @@ spg_quad_choose(PG_FUNCTION_ARGS)
 {
 	spgChooseIn *in = (spgChooseIn *) PG_GETARG_POINTER(0);
 	spgChooseOut *out = (spgChooseOut *) PG_GETARG_POINTER(1);
-	Point	   *inPoint = DatumGetPointP(in->datum),
-			   *centroid;
+	Point *inPoint = DatumGetPointP(in->datum), *centroid;
 
 	if (in->allTheSame)
 	{
@@ -114,8 +113,8 @@ spg_quad_choose(PG_FUNCTION_ARGS)
 static int
 x_cmp(const void *a, const void *b, void *arg)
 {
-	Point	   *pa = *(Point **) a;
-	Point	   *pb = *(Point **) b;
+	Point *pa = *(Point **) a;
+	Point *pb = *(Point **) b;
 
 	if (pa->x == pb->x)
 		return 0;
@@ -125,8 +124,8 @@ x_cmp(const void *a, const void *b, void *arg)
 static int
 y_cmp(const void *a, const void *b, void *arg)
 {
-	Point	   *pa = *(Point **) a;
-	Point	   *pb = *(Point **) b;
+	Point *pa = *(Point **) a;
+	Point *pb = *(Point **) b;
 
 	if (pa->y == pb->y)
 		return 0;
@@ -139,8 +138,8 @@ spg_quad_picksplit(PG_FUNCTION_ARGS)
 {
 	spgPickSplitIn *in = (spgPickSplitIn *) PG_GETARG_POINTER(0);
 	spgPickSplitOut *out = (spgPickSplitOut *) PG_GETARG_POINTER(1);
-	int			i;
-	Point	   *centroid;
+	int i;
+	Point *centroid;
 
 #ifdef USE_MEDIAN
 	/* Use the median values of x and y as the centroid point */
@@ -181,8 +180,8 @@ spg_quad_picksplit(PG_FUNCTION_ARGS)
 
 	for (i = 0; i < in->nTuples; i++)
 	{
-		Point	   *p = DatumGetPointP(in->datums[i]);
-		int			quadrant = getQuadrant(centroid, p) - 1;
+		Point *p = DatumGetPointP(in->datums[i]);
+		int quadrant = getQuadrant(centroid, p) - 1;
 
 		out->leafTupleDatums[i] = PointPGetDatum(p);
 		out->mapTuplesToNodes[i] = quadrant;
@@ -197,9 +196,9 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 {
 	spgInnerConsistentIn *in = (spgInnerConsistentIn *) PG_GETARG_POINTER(0);
 	spgInnerConsistentOut *out = (spgInnerConsistentOut *) PG_GETARG_POINTER(1);
-	Point	   *centroid;
-	int			which;
-	int			i;
+	Point *centroid;
+	int which;
+	int i;
 
 	Assert(in->hasPrefix);
 	centroid = DatumGetPointP(in->prefixDatum);
@@ -217,7 +216,8 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 
 	Assert(in->nNodes == 4);
 	
-	if (in->norderbys > 0) {
+	if (in->norderbys > 0)
+    {
 		out->distances = palloc(in->nNodes * sizeof (double *));
 	}
 
@@ -226,8 +226,8 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 
 	for (i = 0; i < in->nkeys; i++)
 	{
-		Point	   *query = DatumGetPointP(in->scankeys[i].sk_argument);
-		BOX		   *boxQuery;
+		Point *query = DatumGetPointP(in->scankeys[i].sk_argument);
+		BOX *boxQuery;
 
 		switch (in->scankeys[i].sk_strategy)
 		{
@@ -260,8 +260,8 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 				boxQuery = DatumGetBoxP(in->scankeys[i].sk_argument);
 
 				if (DatumGetBool(DirectFunctionCall2(box_contain_pt,
-												   PointerGetDatum(boxQuery),
-												 PointerGetDatum(centroid))))
+												PointerGetDatum(boxQuery),
+												PointerGetDatum(centroid))))
 				{
 					/* centroid is in box, so all quadrants are OK */
 				}
@@ -290,7 +290,7 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 		}
 
 		if (which == 0)
-			break;				/* no need to consider remaining conditions */
+			break; /* no need to consider remaining conditions */
 	}
 
     out->levelAdds = palloc(sizeof(int) * 4);
@@ -299,7 +299,8 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 	/* We must descend into the quadrant(s) identified by which */
 	out->nodeNumbers = (int *) palloc(sizeof(int) * 4);
 	out->nNodes = 0;
-    if (in->level == 0 && in->norderbys > 0) {
+    if (in->level == 0 && in->norderbys > 0)
+    {
         BOX *newbox = palloc(sizeof(BOX));
         Point newp;
         newp.x = newp.y = get_float8_infinity();
@@ -316,11 +317,13 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 		if (which & (1 << i))
 		{
 			out->nodeNumbers[out->nNodes++] = i - 1;
-			if (DatumGetBoxP(in->suppValue) != NULL) {
+			if (DatumGetBoxP(in->suppValue) != NULL)
+            {
 				BOX *area = DatumGetBoxP(in->suppValue);
 				BOX *newbox = (BOX *) palloc0(sizeof(BOX));
 				Point p1, p2;
-				switch (i) {
+				switch (i)
+                {
 					case 1:
 						newbox->high = area->high;
 						newbox->low = *centroid;
@@ -348,7 +351,8 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 				}
 				out->suppValues[out->nNodes-1] = BoxPGetDatum(newbox);
 			}
-			if (in->norderbys > 0) {
+			if (in->norderbys > 0)
+            {
 				spg_point_distance(out->suppValues[out->nNodes-1],
 					in->norderbys, in->orderbyKeys, &out->distances[out->nNodes-1], false);
 			}
@@ -364,9 +368,9 @@ spg_quad_leaf_consistent(PG_FUNCTION_ARGS)
 {
 	spgLeafConsistentIn *in = (spgLeafConsistentIn *) PG_GETARG_POINTER(0);
 	spgLeafConsistentOut *out = (spgLeafConsistentOut *) PG_GETARG_POINTER(1);
-	Point	   *datum = DatumGetPointP(in->leafDatum);
-	bool		res;
-	int			i;
+	Point *datum = DatumGetPointP(in->leafDatum);
+	bool res;
+	int i;
     out->distances = NULL;
 
 	/* all tests are exact */
@@ -379,7 +383,7 @@ spg_quad_leaf_consistent(PG_FUNCTION_ARGS)
 	res = true;
 	for (i = 0; i < in->nkeys; i++)
 	{
-		Point	   *query = DatumGetPointP(in->scankeys[i].sk_argument);
+		Point *query = DatumGetPointP(in->scankeys[i].sk_argument);
 
 		switch (in->scankeys[i].sk_strategy)
 		{
@@ -417,7 +421,8 @@ spg_quad_leaf_consistent(PG_FUNCTION_ARGS)
 			break;
 	}
 	
-	if (res && in->norderbys > 0) { 
+	if (res && in->norderbys > 0)
+    { 
 		/* ok, it passes -> let's compute the distances */
 		spg_point_distance(in->leafDatum,
 			in->norderbys, in->orderbykeys, &out->distances, true);

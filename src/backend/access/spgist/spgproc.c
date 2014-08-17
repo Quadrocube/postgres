@@ -6,7 +6,7 @@ SpGistSearchTreeItemComparator(const RBNode *a, const RBNode *b, void *arg)
 	const SpGistSearchTreeItem *sa = (const SpGistSearchTreeItem *) a;
 	const SpGistSearchTreeItem *sb = (const SpGistSearchTreeItem *) b;
 	IndexScanDesc scan = (IndexScanDesc) arg;
-	int			i;
+	int i;
 
 	/* Order according to distance comparison */
 	for (i = 0; i < scan->numberOfOrderBys; i++)
@@ -73,7 +73,8 @@ SpGistSearchTreeItemDeleter(RBNode *rb, void *arg)
  * Called in queue context 
  */
 void 
-addSearchItemToQueue(IndexScanDesc scan, SpGistSearchItem *item, double *distances) {
+addSearchItemToQueue(IndexScanDesc scan, SpGistSearchItem *item, double *distances)
+{
 	bool isNew;
 	SpGistScanOpaque so = (SpGistScanOpaque) scan->opaque;
 	SpGistSearchTreeItem *newItem = so->tmpTreeItem;
@@ -88,7 +89,8 @@ addSearchItemToQueue(IndexScanDesc scan, SpGistSearchItem *item, double *distanc
  * Leaf SpGistSearchItem constructor, called in queue context
  */
 SpGistSearchItem *newHeapItem(SpGistScanOpaque so, int level, 
-        ItemPointerData heapPtr, Datum leafValue, bool recheck) {
+        ItemPointerData heapPtr, Datum leafValue, bool recheck)
+{
 	SpGistSearchItem *newItem = (SpGistSearchItem *) palloc(sizeof(SpGistSearchItem));
 	newItem->next = NULL;
 	newItem->level = level;
@@ -106,11 +108,13 @@ freeSearchTreeItem(SpGistScanOpaque so, SpGistSearchItem *item)
 {
 	if (so->state.config.suppLen > 0
             && DatumGetPointer(item->suppValue) != NULL
-            && item->itemState == INNER) {
+            && item->itemState == INNER)
+    {
 		pfree(DatumGetPointer(item->suppValue));
     }
     if (!so->state.attType.attbyval &&
-            DatumGetPointer(item->value) != NULL) {
+            DatumGetPointer(item->value) != NULL)
+    {
         pfree(DatumGetPointer(item->value));
     }
 
@@ -118,7 +122,8 @@ freeSearchTreeItem(SpGistScanOpaque so, SpGistSearchItem *item)
 }
 
 /* Point-box distance in the assumption that box is aligned by axis */
-double dist_pb_simplified(Datum p, Datum b) {
+double dist_pb_simplified(Datum p, Datum b)
+{
 	Point *point = DatumGetPointP(p);
 	BOX *box = DatumGetBoxP(b);
 	double dx = 0.0, dy = 0.0;
@@ -142,12 +147,16 @@ spg_point_distance(Datum to, int norderbys,
     double *distance;
     *distances = malloc(norderbys * sizeof (double *));
     *distance = *distances;
-    for (sk_num = 0; sk_num < norderbys; ++sk_num) {
+    for (sk_num = 0; sk_num < norderbys; ++sk_num)
+    {
         Datum from_point = orderbyKeys[sk_num].sk_argument;
-        if (isLeaf) {
+        if (isLeaf)
+        {
             *distance = DatumGetFloat8 (
                     DirectFunctionCall2(point_distance, from_point, to) );
-        } else {
+        }
+        else
+        {
             *distance = dist_pb_simplified(from_point, to);
         }
         distance++;
