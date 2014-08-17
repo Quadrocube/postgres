@@ -161,6 +161,7 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 {
 	spgInnerConsistentIn *in = (spgInnerConsistentIn *) PG_GETARG_POINTER(0);
 	spgInnerConsistentOut *out = (spgInnerConsistentOut *) PG_GETARG_POINTER(1);
+    out->distances = NULL;
 	double		coord;
 	int			which;
 	int			i;

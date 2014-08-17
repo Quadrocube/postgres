@@ -323,20 +323,25 @@ report:
 		/* item passes the scankeys */
 		if (scan->numberOfOrderBys > 0) {
 			/* the scan is ordered -> add the item to the queue */
+			if (isnull) {
+				/* Assume that all distances for null entries are infinities */
+				int i;
+				out.distances = palloc(scan->numberOfOrderBys * sizeof(double));
+				for (i = 0; i < scan->numberOfOrderBys; ++i) 
+					out.distances[i] = get_float8_infinity();
+			}
 			MemoryContextSwitchTo(so->queueCxt);
 			addSearchItemToQueue(scan,
 				newHeapItem(so, level, leafTuple->heapPtr, leafValue, recheck), 
 				out.distances);
-			MemoryContextSwitchTo(oldCtx);
 		} else {
 			/* non-ordered scan, so report the item right away */
 			MemoryContextSwitchTo(oldCtx);
 			storeRes(so, &leafTuple->heapPtr, leafValue, isnull, recheck);
 			*reportedSome = true;
 		}
-	} else {
-        MemoryContextSwitchTo(oldCtx);
-    }
+	}
+	MemoryContextSwitchTo(oldCtx);
 
 	return result;
 }

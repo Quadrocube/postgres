@@ -203,6 +203,7 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 
 	Assert(in->hasPrefix);
 	centroid = DatumGetPointP(in->prefixDatum);
+    out->distances = NULL;
 
 	if (in->allTheSame)
 	{
@@ -366,6 +367,7 @@ spg_quad_leaf_consistent(PG_FUNCTION_ARGS)
 	Point	   *datum = DatumGetPointP(in->leafDatum);
 	bool		res;
 	int			i;
+    out->distances = NULL;
 
 	/* all tests are exact */
 	out->recheck = false;
