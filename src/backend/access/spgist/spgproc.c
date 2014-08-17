@@ -67,6 +67,11 @@ SpGistSearchTreeItemDeleter(RBNode *rb, void *arg)
 	pfree(rb);
 }
 
+/* 
+ * Construct SpGistSearchTreeItem storing item and add it to queue 
+ * 
+ * Called in queue context 
+ */
 void 
 addSearchItemToQueue(IndexScanDesc scan, SpGistSearchItem *item, double *distances) {
 	bool isNew;
@@ -79,13 +84,16 @@ addSearchItemToQueue(IndexScanDesc scan, SpGistSearchItem *item, double *distanc
 	rb_insert(so->queue, (RBNode *) newItem, &isNew);
 }
 
+/*
+ * Leaf SpGistSearchItem constructor, called in queue context
+ */
 SpGistSearchItem *newHeapItem(SpGistScanOpaque so, int level, 
         ItemPointerData heapPtr, Datum leafValue, bool recheck) {
 	SpGistSearchItem *newItem = (SpGistSearchItem *) palloc(sizeof(SpGistSearchItem));
 	newItem->next = NULL;
 	newItem->level = level;
 	newItem->heap = heapPtr;
-        /* copy value to queue cxt out of tmp cxt */
+    /* copy value to queue cxt out of tmp cxt */
     newItem->value = datumCopy(leafValue, so->state.attType.attbyval, 
                 so->state.attType.attlen);
 	newItem->itemState = recheck ? HEAP_RECHECK : HEAP_NORECHECK;
@@ -130,17 +138,17 @@ void
 spg_point_distance(Datum to, int norderbys, 
         ScanKey orderbyKeys, double **distances, bool isLeaf) 
 {
-	int sk_num;
-        *distances = malloc(norderbys * sizeof (double *));
-        double *distance = *distances;
-        for (sk_num = 0; sk_num < norderbys; ++sk_num) {
-            Datum from_point = orderbyKeys[sk_num].sk_argument;
-            if (isLeaf) {
-                *distance = DatumGetFloat8 (
+    int sk_num;
+    *distances = malloc(norderbys * sizeof (double *));
+    double *distance = *distances;
+    for (sk_num = 0; sk_num < norderbys; ++sk_num) {
+        Datum from_point = orderbyKeys[sk_num].sk_argument;
+        if (isLeaf) {
+            *distance = DatumGetFloat8 (
                     DirectFunctionCall2(point_distance, from_point, to) );
-            } else {
-                *distance = dist_pb_simplified(from_point, to);
-            }
-            distance++;
+        } else {
+            *distance = dist_pb_simplified(from_point, to);
         }
+        distance++;
+    }
 }

@@ -265,11 +265,9 @@ spgrestrpos(PG_FUNCTION_ARGS)
 
 /*
  * Test whether a leaf tuple satisfies all the scan keys
- *
- * *leafValue is set to the reconstructed datum, if provided
- * *recheck is set true if any of the operators are lossy
- *
- * If scan keys are satisfied, fill up so->distances in accordance to so->
+ * 
+ * *reportedSome is set to true if: 
+ *		the scan is not ordered AND the item satisfies the scankeys
  */
 static bool
 spgLeafTest(Relation index, IndexScanDesc scan,
@@ -282,10 +280,11 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 	spgLeafConsistentIn in;
 	spgLeafConsistentOut out;
 	FmgrInfo   *procinfo;
-	MemoryContext oldCtx;
 	SpGistScanOpaque so = scan->opaque;
 	Datum leafValue;
 	bool recheck;
+	/* use temp context for calling leaf_consistent */
+	MemoryContext = oldCtx = MemoryContextSwitchTo(so->tempCxt);
 
 	if (isnull)
 	{
@@ -294,13 +293,10 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 		leafValue = (Datum) 0;
 		recheck = false;
         result = true;
-	} else {
-        leafDatum = SGLTDATUM(leafTuple, &so->state);
-    }
+		goto report;
+	}
 
-	/* use temp context for calling leaf_consistent */
-	oldCtx = MemoryContextSwitchTo(so->tempCxt);
-    if (isnull) goto report;
+	leafDatum = SGLTDATUM(leafTuple, &so->state);
 
 	in.scankeys = so->keyData;
 	in.nkeys = so->numberOfKeys;
@@ -324,13 +320,16 @@ spgLeafTest(Relation index, IndexScanDesc scan,
 	
 report:
 	if (result) {
+		/* item passes the scankeys */
 		if (scan->numberOfOrderBys > 0) {
+			/* the scan is ordered -> add the item to the queue */
 			MemoryContextSwitchTo(so->queueCxt);
 			addSearchItemToQueue(scan,
 				newHeapItem(so, level, leafTuple->heapPtr, leafValue, recheck), 
 				out.distances);
 			MemoryContextSwitchTo(oldCtx);
 		} else {
+			/* non-ordered scan, so report the item right away */
 			MemoryContextSwitchTo(oldCtx);
 			storeRes(so, &leafTuple->heapPtr, leafValue, isnull, recheck);
 			*reportedSome = true;
@@ -429,6 +428,7 @@ void spgInnerTest(Relation index, IndexScanDesc scan, SpGistSearchItem *item,
             }
 
             if (out.distances != NULL) {
+				/* Will copy out the distances in addSearchItemToQueue anyway */
                 distances = out.distances[i];
             } else {
                 distances = inf_distances;
@@ -440,6 +440,7 @@ void spgInnerTest(Relation index, IndexScanDesc scan, SpGistSearchItem *item,
     MemoryContextSwitchTo(oldCxt);
 }
 
+/* A bundle initializer for inner_consistent methods */
 void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan, 
 			SpGistSearchItem *item, SpGistInnerTuple innerTuple) {
 	SpGistScanOpaque so = scan->opaque;
@@ -458,6 +459,7 @@ void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan,
 	in->suppValue = item->suppValue;
 }
 
+/* Returns a next item in an (ordered) scan or null if the index is exhausted */
 SpGistSearchItem *getNextQueueItem(SpGistScanOpaque so) {
     MemoryContext oldCxt = MemoryContextSwitchTo(so->queueCxt);
     SpGistSearchItem *item = NULL;
@@ -637,7 +639,6 @@ redirect:
 					 innerTuple->tupstate);
 			}
 
-			/* use temp context for calling inner_consistent */
             spgInnerTest(index, scan, item, innerTuple, isnull);
         }
 
