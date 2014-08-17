@@ -2782,9 +2782,14 @@ explain (costs off)
    Index Cond: ((thousand = 1) AND (tenthous = 1001))
 (2 rows)
 
+--
+-- Check KNN on sp-gist
+--
+SET enable_seqscan = OFF;
+(2 rows)
+
 DROP INDEX gpointind;
 CREATE INDEX spgqpointind ON point_tbl USING spgist (f1 quad_point_ops);
-
 SELECT * FROM point_tbl ORDER BY f1 <-> '0,1';
      f1     
 ------------
@@ -2817,9 +2822,10 @@ SELECT * FROM point_tbl WHERE f1 <@ '(-10,-10),(10,10)':: box ORDER BY f1 <-> '0
  (10,10)
 (4 rows)
 
+EXPLAIN (COSTS OFF)
 SELECT * FROM point_tbl ORDER BY f1 <-> '0,1';
-               QUERY PLAN                
------------------------------------------
+              QUERY PLAN               
+---------------------------------------
  Index Scan using gpointind on point_tbl
    Order By: (f1 <-> '(0,1)'::point)
 (2 rows)
@@ -2895,3 +2901,5 @@ SELECT * FROM point_tbl WHERE f1 <@ '(-10,-10),(10,10)':: box ORDER BY f1 <-> '0
  (10,10)
 (4 rows)
 
+DROP INDEX spgqpointind;
+CREATE INDEX spgkpointind ON point_tbl USING spgist (f1 kd_point_ops);

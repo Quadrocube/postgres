@@ -939,6 +939,14 @@ ORDER BY thousand;
 explain (costs off)
   select * from tenk1 where (thousand, tenthous) in ((1,1001), (null,null));
 
+--
+-- Check KNN on sp-gist
+--
+
+SET enable_seqscan = OFF;
+SET enable_indexscan = ON;
+SET enable_bitmapscan = OFF;
+
 DROP INDEX gpointind;
 CREATE INDEX spgqpointind ON point_tbl USING spgist (f1 quad_point_ops);
 
