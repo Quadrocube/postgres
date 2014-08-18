@@ -155,7 +155,7 @@ typedef struct spgInnerConsistentOut
 	int		   *nodeNumbers;	/* their indexes in the node array */
 	int		   *levelAdds;		/* increment level by this much for each */
 	Datum	   *reconstructedValues;	/* associated reconstructed values */
-        Datum      *suppValues;                 /* any additional data implementation needs to be stored */
+        Datum      *suppValues;                 /* any additional data implementation needs to be stored in the child nodes */
         double     **distances;                 /* associated distances */
 } spgInnerConsistentOut;
 
@@ -165,7 +165,7 @@ typedef struct spgInnerConsistentOut
 typedef struct spgLeafConsistentIn
 {
 	ScanKey		scankeys;		/* array of operators and comparison values */
-        ScanKey         orderbykeys;
+        ScanKey         orderbykeys; /* array of ordering operators and comparison values */
 	int		nkeys;			/* length of array */
         int             norderbys;
 

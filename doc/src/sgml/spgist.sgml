@@ -83,6 +83,7 @@
        <literal>&gt;&gt;</>
        <literal>&gt;^</>
        <literal>~=</>
+       <literal>&lt;-&gt;</>
       </entry>
      </row>
      <row>
@@ -95,6 +96,7 @@
        <literal>&gt;&gt;</>
        <literal>&gt;^</>
        <literal>~=</>
+       <literal>&lt;-&gt;</>
       </entry>
      </row>
      <row>
@@ -136,6 +138,10 @@
   <literal>quad_point_ops</> is the default.  <literal>kd_point_ops</>
   supports the same operators but uses a different index data structure which
   may offer better performance in some applications.
+ </para>
+ <para>
+  By supporting the ordering &lt;-&gt; operator the quad_point_ops and kd_point_ops provide 
+  a user with the ability to perform a K-nearest-neighbour search over the indexed point dataset.
  </para>
 
 </sect1>
@@ -539,9 +545,12 @@ CREATE FUNCTION my_inner_consistent(internal, internal) RETURNS void ...
 typedef struct spgInnerConsistentIn
 {
     ScanKey     scankeys;       /* array of operators and comparison values */
+	ScanKey		orderbyKeys;	/* array of ordering operators and comparison values */
     int         nkeys;          /* length of array */
+    int         norderbys;      /* length of array */
 
     Datum       reconstructedValue;     /* value reconstructed at parent */
+	Datum		suppValue		/* supplimentary value of parent */
     int         level;          /* current level (counting from zero) */
     bool        returnData;     /* original data must be returned? */
 
@@ -559,6 +568,8 @@ typedef struct spgInnerConsistentOut
     int        *nodeNumbers;    /* their indexes in the node array */
     int        *levelAdds;      /* increment level by this much for each */
     Datum      *reconstructedValues;    /* associated reconstructed values */
+	Datum	   *suppValues;		/* any additional data implementation needs to be stored in the child nodes */
+	double	   **distances;		/* associated distances */
 } spgInnerConsistentOut;
 </programlisting>
 
@@ -573,10 +584,15 @@ typedef struct spgInnerConsistentOut
        In particular it is not necessary to check <structfield>sk_flags</> to
        see if the comparison value is NULL, because the SP-GiST core code
        will filter out such conditions.
+       <structfield>orderbyKeys</>, of length <structfield>norderbys</>,
+	   describes ordering operators (if any) in the same fashion.
        <structfield>reconstructedValue</> is the value reconstructed for the
        parent tuple; it is <literal>(Datum) 0</> at the root level or if the
        <function>inner_consistent</> function did not provide a value at the
        parent level.
+	   <structfield>suppValue</> is any additional value that an implementation
+	   decided to store for the parent node (<literal>(Datum) 0</> in case the 
+	   current node is root).
        <structfield>level</> is the current inner tuple's level, starting at
        zero for the root level.
        <structfield>returnData</> is <literal>true</> if reconstructed data is
@@ -592,7 +608,6 @@ typedef struct spgInnerConsistentOut
        <structfield>nNodes</> is the number of child nodes contained in the
        inner tuple, and
        <structfield>nodeLabels</> is an array of their label values, or
-       NULL if the nodes do not have labels.
       </para>
 
       <para>
@@ -608,10 +623,18 @@ typedef struct spgInnerConsistentOut
        <structfield>reconstructedValues</> to an array of the values
        reconstructed for each child node to be visited; otherwise, leave
        <structfield>reconstructedValues</> as NULL.
+       <structfield>suppValues</> serves the similiar purpose of holding
+	   the implementation-defined data for the inner nodes.
+       <structfield>distances</> if the ordered search is carried out,
+	   the implementation is supposed to fill them in accordance to the
+	   ordering operators provided in <structfield>orderbyKeys</> 
+	   (nodes with lowest distances will be processed first). Leave it
+	   NULL otherwise. 
        Note that the <function>inner_consistent</> function is
        responsible for palloc'ing the
-       <structfield>nodeNumbers</>, <structfield>levelAdds</> and
-       <structfield>reconstructedValues</> arrays.
+       <structfield>nodeNumbers</>, <structfield>levelAdds</>, 
+	   <structfield>distances</>, <structfield>suppValues</> and 
+	   <structfield>reconstructedValues</> arrays.
       </para>
      </listitem>
     </varlistentry>
@@ -636,7 +659,9 @@ CREATE FUNCTION my_leaf_consistent(internal, internal) RETURNS bool ...
 typedef struct spgLeafConsistentIn
 {
     ScanKey     scankeys;       /* array of operators and comparison values */
+    ScanKey     orderbykeys;    /* array of ordering operators and comparison values */
     int         nkeys;          /* length of array */
+	int         norderbys;		/* length of array */
 
     Datum       reconstructedValue;     /* value reconstructed at parent */
     int         level;          /* current level (counting from zero) */
@@ -649,6 +674,7 @@ typedef struct spgLeafConsistentOut
 {
     Datum       leafValue;      /* reconstructed original data, if any */
     bool        recheck;        /* set true if operator must be rechecked */
+	double		*distances;		/* associated distances */
 } spgLeafConsistentOut;
 </programlisting>
 
@@ -663,6 +689,8 @@ typedef struct spgLeafConsistentOut
        In particular it is not necessary to check <structfield>sk_flags</> to
        see if the comparison value is NULL, because the SP-GiST core code
        will filter out such conditions.
+	   The array <structfield>orderbykeys>, of length <structfield>norderbys</>,
+	   describes the ordering operators in the same fashion.
        <structfield>reconstructedValue</> is the value reconstructed for the
        parent tuple; it is <literal>(Datum) 0</> at the root level or if the
        <function>inner_consistent</> function did not provide a value at the
@@ -685,6 +713,9 @@ typedef struct spgLeafConsistentOut
        <structfield>recheck</> may be set to <literal>true</> if the match
        is uncertain and so the operator(s) must be re-applied to the actual
        heap tuple to verify the match.
+	   In case when the ordered search is performed, <structfield>distances</>
+	   should be set in accordance with the ordering operator provided, otherwise
+	   implementation is supposed to set it to NULL.
       </para>
      </listitem>
     </varlistentry>
