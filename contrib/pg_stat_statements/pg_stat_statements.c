@@ -76,7 +76,6 @@
 #include "utils/builtins.h"
 #include "utils/memutils.h"
 
-
 PG_MODULE_MAGIC;
 
 /* Location of permanent stats file (valid when database is shut down) */
@@ -2396,6 +2395,7 @@ JumbleExpr(pgssJumbleState *jstate, Node *node)
 				SubLink    *sublink = (SubLink *) node;
 
 				APP_JUMB(sublink->subLinkType);
+				APP_JUMB(sublink->subLinkId);
 				JumbleExpr(jstate, (Node *) sublink->testexpr);
 				JumbleQuery(jstate, (Query *) sublink->subselect);
 			}
