@@ -965,3 +965,17 @@ SELECT * FROM point_tbl WHERE f1 <@ '(-10,-10),(10,10)':: box ORDER BY f1 <-> '0
 
 DROP INDEX spgqpointind;
 CREATE INDEX spgkpointind ON point_tbl USING spgist (f1 kd_point_ops);
+
+SELECT * FROM point_tbl ORDER BY f1 <-> '0,1';
+SELECT * FROM point_tbl WHERE f1 IS NOT NULL ORDER BY f1 <-> '0,1';
+SELECT * FROM point_tbl WHERE f1 <@ '(-10,-10),(10,10)':: box ORDER BY f1 <-> '0,1';
+EXPLAIN (COSTS OFF)
+SELECT * FROM point_tbl ORDER BY f1 <-> '0,1';
+SELECT * FROM point_tbl ORDER BY f1 <-> '0,1';
+EXPLAIN (COSTS OFF)
+SELECT * FROM point_tbl WHERE f1 IS NOT NULL ORDER BY f1 <-> '0,1';
+SELECT * FROM point_tbl WHERE f1 IS NOT NULL ORDER BY f1 <-> '0,1';
+EXPLAIN (COSTS OFF)
+SELECT * FROM point_tbl WHERE f1 <@ '(-10,-10),(10,10)':: box ORDER BY f1 <-> '0,1';
+SELECT * FROM point_tbl WHERE f1 <@ '(-10,-10),(10,10)':: box ORDER BY f1 <-> '0,1';
+
