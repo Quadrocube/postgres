@@ -136,12 +136,13 @@ typedef enum SPGistSEARCHITEMSTATE {
 
 typedef struct SpGistSearchItem
 {
-        SPGistSEARCHITEMSTATE itemState;        /* see above */
-    	Datum   value;                          /* value reconstructed from parent or leafValue if heaptuple */
-        Datum   suppValue;                      /* any additional value an opclass needs to be stored */
-	int	level;                          /* level of items on this page */
-	struct SpGistSearchItem *next;          /* list link */
-        ItemPointerData heap;                   /* heap info, if heap tuple */
+    SPGistSEARCHITEMSTATE itemState;    /* see above */
+    Datum value;                        /* value reconstructed from parent or leafValue if heaptuple */
+    Datum suppValue;                    /* any additional value an opclass needs to be stored */
+    int level;                          /* level of items on this page */
+    struct SpGistSearchItem *next;      /* list link */
+    ItemPointerData heap;               /* heap info, if heap tuple */
+    bool isnull;
 } SpGistSearchItem;
 
 typedef struct SpGistSearchTreeItem

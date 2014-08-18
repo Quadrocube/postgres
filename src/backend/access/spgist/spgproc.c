@@ -89,7 +89,7 @@ addSearchItemToQueue(IndexScanDesc scan, SpGistSearchItem *item, double *distanc
  * Leaf SpGistSearchItem constructor, called in queue context
  */
 SpGistSearchItem *newHeapItem(SpGistScanOpaque so, int level, 
-        ItemPointerData heapPtr, Datum leafValue, bool recheck)
+        ItemPointerData heapPtr, Datum leafValue, bool recheck, bool isnull)
 {
 	SpGistSearchItem *newItem = (SpGistSearchItem *) palloc(sizeof(SpGistSearchItem));
 	newItem->next = NULL;
@@ -100,6 +100,7 @@ SpGistSearchItem *newHeapItem(SpGistScanOpaque so, int level,
                 so->state.attType.attlen);
 	newItem->itemState = recheck ? HEAP_RECHECK : HEAP_NORECHECK;
 	newItem->suppValue = (Datum) 0;
+	newItem->isnull = isnull;
 	return newItem;
 }
 

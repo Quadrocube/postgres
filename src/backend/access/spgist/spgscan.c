@@ -49,6 +49,7 @@ resetSpGistScanOpaque(IndexScanDesc scan)
 		ItemPointerSet(&startEntry->heap, SPGIST_NULL_BLKNO, FirstOffsetNumber);
 		startEntry->itemState = INNER;
 		startEntry->level = 0;
+		startEntry->isnull = true;
 		addSearchItemToQueue(scan, startEntry, so->distances);
 	}
 
@@ -59,6 +60,7 @@ resetSpGistScanOpaque(IndexScanDesc scan)
 		ItemPointerSet(&startEntry->heap, SPGIST_ROOT_BLKNO, FirstOffsetNumber);
 		startEntry->itemState = INNER;
 		startEntry->level = 0;
+		startEntry->isnull = false;
 		addSearchItemToQueue(scan, startEntry, so->distances);
 	}
 	
@@ -335,7 +337,7 @@ report:
 			}
 			MemoryContextSwitchTo(so->queueCxt);
 			addSearchItemToQueue(scan,
-				newHeapItem(so, level, leafTuple->heapPtr, leafValue, recheck), 
+				newHeapItem(so, level, leafTuple->heapPtr, leafValue, recheck, isnull), 
 				out.distances);
 		}
 		else
@@ -455,6 +457,7 @@ void spgInnerTest(Relation index, IndexScanDesc scan, SpGistSearchItem *item,
 				distances = inf_distances;
 			}
 			newItem->itemState = INNER;
+			newItem->isnull = isnull;
 			addSearchItemToQueue(scan, newItem, distances);
 		}
 	}
@@ -555,121 +558,122 @@ redirect:
 		/* Check for interrupts, just in case of infinite loop */
 		CHECK_FOR_INTERRUPTS();
 
-		blkno = ItemPointerGetBlockNumber(&item->heap);
-		offset = ItemPointerGetOffsetNumber(&item->heap);
-
-		if (buffer == InvalidBuffer)
-		{
-			buffer = ReadBuffer(index, blkno);
-			LockBuffer(buffer, BUFFER_LOCK_SHARE);
-		}
-		else if (blkno != BufferGetBlockNumber(buffer))
-		{
-			UnlockReleaseBuffer(buffer);
-			buffer = ReadBuffer(index, blkno);
-			LockBuffer(buffer, BUFFER_LOCK_SHARE);
-		}
-		
-		/* else new pointer points to the same page, no work needed */
-
-		page = BufferGetPage(buffer);
-
-		isnull = SpGistPageStoresNulls(page) ? true : false;
-
 		if (SPGISTSearchItemIsHeap(*item))
 		{
 			/* We store heap items in the queue only in case of ordered search */
 			Assert(scan->numberOfOrderBys > 0);
-			/* Heap items can only be stored on leaf pages */
-			Assert(SpGistPageIsLeaf(page));
-			storeRes(so, &item->heap, item->value, isnull, 
+			storeRes(so, &item->heap, item->value, item->isnull, 
 				item->itemState == HEAP_RECHECK);
 			reportedSome = true;
-		}
-		else if (SpGistPageIsLeaf(page))
+		} 
+		else
 		{
-			/* Page is a leaf - that is, all it's tuples are heap items */
-			SpGistLeafTuple leafTuple;
-			OffsetNumber max = PageGetMaxOffsetNumber(page);
+			blkno = ItemPointerGetBlockNumber(&item->heap);
+			offset = ItemPointerGetOffsetNumber(&item->heap);
 
-			if (SpGistBlockIsRoot(blkno))
+			if (buffer == InvalidBuffer)
 			{
-				/* When root is a leaf, examine all its tuples */
-				for (offset = FirstOffsetNumber; offset <= max; offset++)
+				buffer = ReadBuffer(index, blkno);
+				LockBuffer(buffer, BUFFER_LOCK_SHARE);
+			}
+			else if (blkno != BufferGetBlockNumber(buffer))
+			{
+				UnlockReleaseBuffer(buffer);
+				buffer = ReadBuffer(index, blkno);
+				LockBuffer(buffer, BUFFER_LOCK_SHARE);
+			}
+
+			/* else new pointer points to the same page, no work needed */
+
+			page = BufferGetPage(buffer);
+
+			isnull = SpGistPageStoresNulls(page) ? true : false;
+
+			if (SpGistPageIsLeaf(page))
+			{
+				/* Page is a leaf - that is, all it's tuples are heap items */
+				SpGistLeafTuple leafTuple;
+				OffsetNumber max = PageGetMaxOffsetNumber(page);
+
+				if (SpGistBlockIsRoot(blkno))
 				{
-					leafTuple = (SpGistLeafTuple)
-						PageGetItem(page, PageGetItemId(page, offset));
-					if (leafTuple->tupstate != SPGIST_LIVE)
+					/* When root is a leaf, examine all its tuples */
+					for (offset = FirstOffsetNumber; offset <= max; offset++)
 					{
-						/* all tuples on root should be live */
-						elog(ERROR, "unexpected SPGiST tuple state: %d",
-							 leafTuple->tupstate);
-					}
+						leafTuple = (SpGistLeafTuple)
+							PageGetItem(page, PageGetItemId(page, offset));
+						if (leafTuple->tupstate != SPGIST_LIVE)
+						{
+							/* all tuples on root should be live */
+							elog(ERROR, "unexpected SPGiST tuple state: %d",
+									leafTuple->tupstate);
+						}
 
-					Assert(ItemPointerIsValid(&leafTuple->heapPtr));
-					spgLeafTest(index, scan, leafTuple, isnull, item->level,
-									item->value, &reportedSome, storeRes);
+						Assert(ItemPointerIsValid(&leafTuple->heapPtr));
+						spgLeafTest(index, scan, leafTuple, isnull, item->level,
+								item->value, &reportedSome, storeRes);
+					}
 				}
-			}
-			else
-			{
-				/* Normal case: just examine the chain we arrived at */
-				while (offset != InvalidOffsetNumber)
+				else
 				{
-					Assert(offset >= FirstOffsetNumber && offset <= max);
-					leafTuple = (SpGistLeafTuple)
-						PageGetItem(page, PageGetItemId(page, offset));
-					if (leafTuple->tupstate != SPGIST_LIVE)
+					/* Normal case: just examine the chain we arrived at */
+					while (offset != InvalidOffsetNumber)
 					{
-						if (leafTuple->tupstate == SPGIST_REDIRECT)
+						Assert(offset >= FirstOffsetNumber && offset <= max);
+						leafTuple = (SpGistLeafTuple)
+							PageGetItem(page, PageGetItemId(page, offset));
+						if (leafTuple->tupstate != SPGIST_LIVE)
 						{
-							/* redirection tuple should be first in chain */
-							Assert(offset == ItemPointerGetOffsetNumber(&item->heap));
-							/* transfer attention to redirect point */
-							item->heap = ((SpGistDeadTuple) leafTuple)->pointer;
-							Assert(ItemPointerGetBlockNumber(&item->heap) != SPGIST_METAPAGE_BLKNO);
-							goto redirect;
+							if (leafTuple->tupstate == SPGIST_REDIRECT)
+							{
+								/* redirection tuple should be first in chain */
+								Assert(offset == ItemPointerGetOffsetNumber(&item->heap));
+								/* transfer attention to redirect point */
+								item->heap = ((SpGistDeadTuple) leafTuple)->pointer;
+								Assert(ItemPointerGetBlockNumber(&item->heap) != SPGIST_METAPAGE_BLKNO);
+								goto redirect;
+							}
+							if (leafTuple->tupstate == SPGIST_DEAD)
+							{
+								/* dead tuple should be first in chain */
+								Assert(offset == ItemPointerGetOffsetNumber(&item->heap));
+								/* No live entries on this page */
+								Assert(leafTuple->nextOffset == InvalidOffsetNumber);
+								break;
+							}
+							/* We should not arrive at a placeholder */
+							elog(ERROR, "unexpected SPGiST tuple state: %d",
+									leafTuple->tupstate);
 						}
-						if (leafTuple->tupstate == SPGIST_DEAD)
-						{
-							/* dead tuple should be first in chain */
-							Assert(offset == ItemPointerGetOffsetNumber(&item->heap));
-							/* No live entries on this page */
-							Assert(leafTuple->nextOffset == InvalidOffsetNumber);
-							break;
-						}
-						/* We should not arrive at a placeholder */
-						elog(ERROR, "unexpected SPGiST tuple state: %d",
-							 leafTuple->tupstate);
+
+						Assert(ItemPointerIsValid(&leafTuple->heapPtr));
+						spgLeafTest(index, scan, leafTuple, isnull, item->level,
+								item->value, &reportedSome, storeRes);
+						offset = leafTuple->nextOffset;
 					}
-
-					Assert(ItemPointerIsValid(&leafTuple->heapPtr));
-					spgLeafTest(index, scan, leafTuple, isnull, item->level,
-									item->value, &reportedSome, storeRes);
-					offset = leafTuple->nextOffset;
 				}
 			}
-		}
-		else	/* page is inner */
-		{
-			SpGistInnerTuple innerTuple = 
-				(SpGistInnerTuple) PageGetItem(page,
-												PageGetItemId(page, offset));
-
-			if (innerTuple->tupstate != SPGIST_LIVE)
+			else	/* page is inner */
 			{
-				if (innerTuple->tupstate == SPGIST_REDIRECT)
-				{
-					/* transfer attention to redirect point */
-					item->heap = ((SpGistDeadTuple) innerTuple)->pointer;
-					Assert(ItemPointerGetBlockNumber(&item->heap) != SPGIST_METAPAGE_BLKNO);
-					goto redirect;
-				}
-				elog(ERROR, "unexpected SPGiST tuple state: %d",
-					 innerTuple->tupstate);
-			}
+				SpGistInnerTuple innerTuple = 
+					(SpGistInnerTuple) PageGetItem(page,
+							PageGetItemId(page, offset));
 
-			spgInnerTest(index, scan, item, innerTuple, isnull);
+				if (innerTuple->tupstate != SPGIST_LIVE)
+				{
+					if (innerTuple->tupstate == SPGIST_REDIRECT)
+					{
+						/* transfer attention to redirect point */
+						item->heap = ((SpGistDeadTuple) innerTuple)->pointer;
+						Assert(ItemPointerGetBlockNumber(&item->heap) != SPGIST_METAPAGE_BLKNO);
+						goto redirect;
+					}
+					elog(ERROR, "unexpected SPGiST tuple state: %d",
+							innerTuple->tupstate);
+				}
+
+				spgInnerTest(index, scan, item, innerTuple, isnull);
+			}
 		}
 
 		/* done with this scan entry */

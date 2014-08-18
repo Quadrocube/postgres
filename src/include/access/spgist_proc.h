@@ -44,7 +44,7 @@ extern void
 addSearchItemToQueue(IndexScanDesc scan, SpGistSearchItem *item, double *distances);
 
 extern SpGistSearchItem *newHeapItem(SpGistScanOpaque so, int level, 
-        ItemPointerData heapPtr, Datum leafValue, bool recheck);
+        ItemPointerData heapPtr, Datum leafValue, bool recheck, bool isnull);
 
 extern void
 spg_point_distance(Datum to, int norderbys, 
