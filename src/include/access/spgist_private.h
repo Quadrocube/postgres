@@ -158,10 +158,10 @@ typedef struct SpGistSearchTreeItem
 typedef struct SpGistScanOpaqueData
 {
 	SpGistState state;			/* see above */
-        RBTree	   *queue;			/* queue of unvisited items */
+	RBTree	   *queue;			/* queue of unvisited items */
 	MemoryContext queueCxt;		/* context holding the queue */
 	MemoryContext tempCxt;		/* short-lived memory context */
-        SpGistSearchTreeItem *curTreeItem;
+	SpGistSearchTreeItem *curTreeItem;
 
 	/* Control flags showing whether to search nulls and/or non-nulls */
 	bool		searchNulls;	/* scan matches (all) null entries */
