@@ -306,7 +306,7 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 			out->nodeNumbers[out->nNodes++] = i - 1;
             if (DatumGetBoxP(in->suppValue) != NULL)
             {
-                out->suppValues[out->nNodes-1] = boxes[i];
+                out->suppValues[out->nNodes-1] = boxes[i-1];
             }
 			if (in->norderbys > 0)
             {
