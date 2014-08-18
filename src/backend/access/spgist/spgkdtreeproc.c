@@ -164,8 +164,8 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 	double coord;
 	int which;
 	int i;
-    Datum *boxes = NULL;
-    out->distances = NULL;
+	Datum *boxes = NULL;
+	out->distances = NULL;
 
 	Assert(in->hasPrefix);
 	coord = DatumGetFloat8(in->prefixDatum);
@@ -176,7 +176,7 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 	Assert(in->nNodes == 2);
 
 	if (in->norderbys > 0)
-    {
+	{
 		out->distances = palloc(in->nNodes * sizeof (double *));
 	}
 	
@@ -260,7 +260,7 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 	out->nodeNumbers = (int *) palloc(sizeof(int) * 2);
 	out->nNodes = 0;
 	
-	if (in->level == 0 && in->norderbys > 0)
+    if (in->level == 0 && in->norderbys > 0)
     {
         BOX *newbox = palloc(sizeof(BOX));
         Point newp;
@@ -279,8 +279,8 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 		boxes = (Datum *) palloc(sizeof(Datum) * 2);
 		out->suppValues = (Datum *) palloc(sizeof(Datum) * 2);
 		switch (in->level % 2)
-        {
-            case 0:
+		{
+			case 0:
 				p1.x = p2.x = coord;
 				p1.y = area->high.y;
 				p2.y = area->low.y;
@@ -302,14 +302,15 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 	for (i = 1; i <= 2; i++)
 	{
 		if (which & (1 << i))
-        {
+		{
 			out->nodeNumbers[out->nNodes++] = i - 1;
-            if (DatumGetBoxP(in->suppValue) != NULL)
-            {
-                out->suppValues[out->nNodes-1] = boxes[i-1];
             }
+			if (DatumGetBoxP(in->suppValue) != NULL)
+			{
+				out->suppValues[out->nNodes-1] = boxes[i-1];
+			}
 			if (in->norderbys > 0)
-            {
+			{
 				spg_point_distance(out->suppValues[out->nNodes-1],
 					in->norderbys, in->orderbyKeys, &out->distances[out->nNodes-1], false);
 			}

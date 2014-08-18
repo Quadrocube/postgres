@@ -202,7 +202,7 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 
 	Assert(in->hasPrefix);
 	centroid = DatumGetPointP(in->prefixDatum);
-    out->distances = NULL;
+	out->distances = NULL;
 
 	if (in->allTheSame)
 	{
@@ -217,7 +217,7 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 	Assert(in->nNodes == 4);
 	
 	if (in->norderbys > 0)
-    {
+	{
 		out->distances = palloc(in->nNodes * sizeof (double *));
 	}
 
@@ -318,12 +318,12 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 		{
 			out->nodeNumbers[out->nNodes++] = i - 1;
 			if (DatumGetBoxP(in->suppValue) != NULL)
-            {
+			{
 				BOX *area = DatumGetBoxP(in->suppValue);
 				BOX *newbox = (BOX *) palloc0(sizeof(BOX));
 				Point p1, p2;
 				switch (i)
-                {
+				{
 					case 1:
 						newbox->high = area->high;
 						newbox->low = *centroid;
@@ -352,7 +352,7 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 				out->suppValues[out->nNodes-1] = BoxPGetDatum(newbox);
 			}
 			if (in->norderbys > 0)
-            {
+			{
 				spg_point_distance(out->suppValues[out->nNodes-1],
 					in->norderbys, in->orderbyKeys, &out->distances[out->nNodes-1], false);
 			}
@@ -371,7 +371,7 @@ spg_quad_leaf_consistent(PG_FUNCTION_ARGS)
 	Point *datum = DatumGetPointP(in->leafDatum);
 	bool res;
 	int i;
-    out->distances = NULL;
+	out->distances = NULL;
 
 	/* all tests are exact */
 	out->recheck = false;
@@ -422,7 +422,7 @@ spg_quad_leaf_consistent(PG_FUNCTION_ARGS)
 	}
 	
 	if (res && in->norderbys > 0)
-    { 
+	{ 
 		/* ok, it passes -> let's compute the distances */
 		spg_point_distance(in->leafDatum,
 			in->norderbys, in->orderbykeys, &out->distances, true);

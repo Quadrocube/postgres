@@ -95,9 +95,9 @@ SpGistSearchItem *newHeapItem(SpGistScanOpaque so, int level,
 	newItem->next = NULL;
 	newItem->level = level;
 	newItem->heap = heapPtr;
-    /* copy value to queue cxt out of tmp cxt */
-    newItem->value = datumCopy(leafValue, so->state.attType.attbyval, 
-                so->state.attType.attlen);
+	/* copy value to queue cxt out of tmp cxt */
+	newItem->value = datumCopy(leafValue, so->state.attType.attbyval, 
+	            so->state.attType.attlen);
 	newItem->itemState = recheck ? HEAP_RECHECK : HEAP_NORECHECK;
 	newItem->suppValue = (Datum) 0;
 	newItem->isnull = isnull;
@@ -107,11 +107,11 @@ SpGistSearchItem *newHeapItem(SpGistScanOpaque so, int level,
 void
 freeSearchTreeItem(SpGistScanOpaque so, SpGistSearchItem *item)
 {
-	if (so->state.config.suppLen > 0
+    if (so->state.config.suppLen > 0
             && DatumGetPointer(item->suppValue) != NULL
             && item->itemState == INNER)
     {
-		pfree(DatumGetPointer(item->suppValue));
+        pfree(DatumGetPointer(item->suppValue));
     }
     if (!so->state.attType.attbyval &&
             DatumGetPointer(item->value) != NULL)
@@ -119,7 +119,7 @@ freeSearchTreeItem(SpGistScanOpaque so, SpGistSearchItem *item)
         pfree(DatumGetPointer(item->value));
     }
 
-	pfree(item);
+    pfree(item);
 }
 
 /* Point-box distance in the assumption that box is aligned by axis */
