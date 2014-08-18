@@ -45,8 +45,8 @@ typedef struct spgConfigOut
 	Oid			labelType;		/* Data type of inner-tuple node labels */
 	bool		canReturnData;	/* Opclass can reconstruct original data */
 	bool		longValuesOK;	/* Opclass can cope with values > 1 page */
-        /* If opclass needs to store any supplimentary data in nodes during the 
-              scan - the size of the structure */
+		/* If opclass needs to store any supplimentary data in nodes during the 
+			  scan - the size of the structure */
 	int suppLen;
 } spgConfigOut;
 
@@ -132,21 +132,21 @@ typedef struct spgPickSplitOut
 typedef struct spgInnerConsistentIn
 {
 	ScanKey		scankeys;		/* array of operators and comparison values */
-	ScanKey     orderbyKeys;
+	ScanKey	 orderbyKeys;
 	int		nkeys;			/* length of array */
-	int     norderbys;
+	int	 norderbys;
 
 	Datum		reconstructedValue;		/* value reconstructed at parent */
-        Datum           suppValue;              /* supplimentary value of parent */
-	int		level;			/* current level (counting from zero) */
+	Datum		suppValue;			  /* supplimentary value of parent */
+	int			level;			/* current level (counting from zero) */
 	bool		returnData;		/* original data must be returned? */
 
 	/* Data from current inner tuple */
 	bool		allTheSame;		/* tuple is marked all-the-same? */
 	bool		hasPrefix;		/* tuple has a prefix? */
-	Datum		prefixDatum;            /* if so, the prefix value */
-	int		nNodes;			/* number of nodes in the inner tuple */
-	Datum           *nodeLabels;		/* node label values (NULL if none) */
+	Datum		prefixDatum;			/* if so, the prefix value */
+	int			nNodes;			/* number of nodes in the inner tuple */
+	Datum		*nodeLabels;		/* node label values (NULL if none) */
 } spgInnerConsistentIn;
 
 typedef struct spgInnerConsistentOut
@@ -155,8 +155,8 @@ typedef struct spgInnerConsistentOut
 	int		   *nodeNumbers;	/* their indexes in the node array */
 	int		   *levelAdds;		/* increment level by this much for each */
 	Datum	   *reconstructedValues;	/* associated reconstructed values */
-	Datum      *suppValues;                 /* any additional data implementation needs to be stored in the child nodes */
-	double     **distances;                 /* associated distances */
+	Datum	  *suppValues;				 /* any additional data implementation needs to be stored in the child nodes */
+	double	 **distances;				 /* associated distances */
 } spgInnerConsistentOut;
 
 /*
@@ -165,9 +165,9 @@ typedef struct spgInnerConsistentOut
 typedef struct spgLeafConsistentIn
 {
 	ScanKey		scankeys;		/* array of operators and comparison values */
-	ScanKey         orderbykeys; /* array of ordering operators and comparison values */
+	ScanKey		 orderbykeys; /* array of ordering operators and comparison values */
 	int		nkeys;			/* length of array */
-	int             norderbys;
+	int			 norderbys;
 
 	Datum		reconstructedValue;		/* value reconstructed at parent */
 	int			level;			/* current level (counting from zero) */
@@ -180,7 +180,7 @@ typedef struct spgLeafConsistentOut
 {
 	Datum		leafValue;		/* reconstructed original data, if any */
 	bool		recheck;		/* set true if operator must be rechecked */
-	double      *distances;            /* associated distances */
+	double	  *distances;			/* associated distances */
 } spgLeafConsistentOut;
 
 

@@ -260,18 +260,18 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 	out->nodeNumbers = (int *) palloc(sizeof(int) * 2);
 	out->nNodes = 0;
 	
-    if (in->level == 0 && in->norderbys > 0)
-    {
-        BOX *newbox = palloc(sizeof(BOX));
-        Point newp;
-        newp.x = newp.y = get_float8_infinity();
-        newbox->high = newp;
-        newp.x = newp.y = -get_float8_infinity();
-        newbox->low = newp;
-        in->suppValue = PointerGetDatum(newbox);
-    }
-    if (DatumGetBoxP(in->suppValue) != NULL)
-    {
+	if (in->level == 0 && in->norderbys > 0)
+	{
+		BOX *newbox = palloc(sizeof(BOX));
+		Point newp;
+		newp.x = newp.y = get_float8_infinity();
+		newbox->high = newp;
+		newp.x = newp.y = -get_float8_infinity();
+		newbox->low = newp;
+		in->suppValue = PointerGetDatum(newbox);
+	}
+	if (DatumGetBoxP(in->suppValue) != NULL)
+	{
 		Point p1, p2;
 		BOX *area = DatumGetBoxP(in->suppValue);
 		BOX *newbox1 = (BOX *) palloc0(sizeof(BOX));

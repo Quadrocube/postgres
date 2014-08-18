@@ -129,20 +129,20 @@ typedef struct SpGistState
 } SpGistState;
 
 typedef enum SPGistSEARCHITEMSTATE {
-    HEAP_RECHECK,        /* SearchItem is heap item and rechek is needed before reporting */
-    HEAP_NORECHECK,      /* SearchItem is heap item and no rechek is needed */
-    INNER               /* SearchItem is inner tree item - rechek irrelevant */
+	HEAP_RECHECK,		/* SearchItem is heap item and rechek is needed before reporting */
+	HEAP_NORECHECK,	  /* SearchItem is heap item and no rechek is needed */
+	INNER			   /* SearchItem is inner tree item - rechek irrelevant */
 } SPGistSEARCHITEMSTATE;
 
 typedef struct SpGistSearchItem
 {
-    SPGistSEARCHITEMSTATE itemState;    /* see above */
-    Datum value;                        /* value reconstructed from parent or leafValue if heaptuple */
-    Datum suppValue;                    /* any additional value an opclass needs to be stored */
-    int level;                          /* level of items on this page */
-    struct SpGistSearchItem *next;      /* list link */
-    ItemPointerData heap;               /* heap info, if heap tuple */
-    bool isnull;
+	SPGistSEARCHITEMSTATE itemState;	/* see above */
+	Datum value;						/* value reconstructed from parent or leafValue if heaptuple */
+	Datum suppValue;					/* any additional value an opclass needs to be stored */
+	int level;						  /* level of items on this page */
+	struct SpGistSearchItem *next;	  /* list link */
+	ItemPointerData heap;			   /* heap info, if heap tuple */
+	bool isnull;
 } SpGistSearchItem;
 
 typedef struct SpGistSearchTreeItem
@@ -171,7 +171,7 @@ typedef struct SpGistScanOpaqueData
 	int			numberOfKeys;	/* number of index qualifier conditions */
 	ScanKey		keyData;		/* array of index qualifier descriptors */
 
-        /* Pre-allocated workspace arrays: */
+		/* Pre-allocated workspace arrays: */
 	SpGistSearchTreeItem *tmpTreeItem;	/* workspace to pass to rb_insert */
 	double	   *distances;		/* output area for gistindex_keytest */
 

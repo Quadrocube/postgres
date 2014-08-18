@@ -14,7 +14,7 @@
 
 #define SPGISTHDRSZ offsetof(SpGistSearchTreeItem, distances)
 #define SPGISTSearchItemIsHeap(item)	((item).itemState == HEAP_RECHECK \
-                                      || (item).itemState == HEAP_NORECHECK)
+									  || (item).itemState == HEAP_NORECHECK)
 
 extern double get_float8_infinity();
 
@@ -22,7 +22,7 @@ void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan,
 			SpGistSearchItem *item, SpGistInnerTuple innerTuple);
 
 void spgInnerTest(Relation index, IndexScanDesc scan, SpGistSearchItem *item, 
-        SpGistInnerTuple innerTuple, bool isnull);
+		SpGistInnerTuple innerTuple, bool isnull);
 
 SpGistSearchItem *getNextQueueItem(SpGistScanOpaque so);
 
@@ -44,11 +44,11 @@ extern void
 addSearchItemToQueue(IndexScanDesc scan, SpGistSearchItem *item, double *distances);
 
 extern SpGistSearchItem *newHeapItem(SpGistScanOpaque so, int level, 
-        ItemPointerData heapPtr, Datum leafValue, bool recheck, bool isnull);
+		ItemPointerData heapPtr, Datum leafValue, bool recheck, bool isnull);
 
 extern void
 spg_point_distance(Datum to, int norderbys, 
-        ScanKey orderbyKeys, double **distances, bool isLeaf); 
+		ScanKey orderbyKeys, double **distances, bool isLeaf); 
 
 extern void
 freeSearchTreeItem(SpGistScanOpaque so, SpGistSearchItem *item);

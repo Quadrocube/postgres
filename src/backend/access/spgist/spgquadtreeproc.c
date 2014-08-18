@@ -293,23 +293,23 @@ spg_quad_inner_consistent(PG_FUNCTION_ARGS)
 			break; /* no need to consider remaining conditions */
 	}
 
-    out->levelAdds = palloc(sizeof(int) * 4);
-    for (i = 0; i < 4; ++i) out->levelAdds[i] = 1;
+	out->levelAdds = palloc(sizeof(int) * 4);
+	for (i = 0; i < 4; ++i) out->levelAdds[i] = 1;
 
 	/* We must descend into the quadrant(s) identified by which */
 	out->nodeNumbers = (int *) palloc(sizeof(int) * 4);
 	out->nNodes = 0;
-    if (in->level == 0 && in->norderbys > 0)
-    {
-        BOX *newbox = palloc(sizeof(BOX));
-        Point newp;
-        newp.x = newp.y = get_float8_infinity();
-        newbox->high = newp;
-        newp.x = newp.y = -get_float8_infinity();
-        newbox->low = newp;
-        in->suppValue = PointerGetDatum(newbox);
-    }
-    if (DatumGetBoxP(in->suppValue) != NULL) 
+	if (in->level == 0 && in->norderbys > 0)
+	{
+		BOX *newbox = palloc(sizeof(BOX));
+		Point newp;
+		newp.x = newp.y = get_float8_infinity();
+		newbox->high = newp;
+		newp.x = newp.y = -get_float8_infinity();
+		newbox->low = newp;
+		in->suppValue = PointerGetDatum(newbox);
+	}
+	if (DatumGetBoxP(in->suppValue) != NULL) 
 		out->suppValues = (Datum *) palloc(sizeof(Datum) * 4);
 	
 	for (i = 1; i <= 4; i++)
