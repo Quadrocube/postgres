@@ -18,8 +18,8 @@
 #include "access/spgist.h"
 #include "nodes/tidbitmap.h"
 #include "storage/relfilenode.h"
-#include "utils/relcache.h"
 #include "utils/rbtree.h"
+#include "utils/relcache.h"
 
 
 /* Page numbers of fixed-location pages */

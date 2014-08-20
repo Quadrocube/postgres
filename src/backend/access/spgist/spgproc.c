@@ -88,7 +88,8 @@ addSearchItemToQueue(IndexScanDesc scan, SpGistSearchItem *item, double *distanc
 /*
  * Leaf SpGistSearchItem constructor, called in queue context
  */
-SpGistSearchItem *newHeapItem(SpGistScanOpaque so, int level, 
+SpGistSearchItem *
+newHeapItem(SpGistScanOpaque so, int level, 
 		ItemPointerData heapPtr, Datum leafValue, bool recheck, bool isnull)
 {
 	SpGistSearchItem *newItem = (SpGistSearchItem *) palloc(sizeof(SpGistSearchItem));
@@ -123,7 +124,8 @@ freeSearchTreeItem(SpGistScanOpaque so, SpGistSearchItem *item)
 }
 
 /* Point-box distance in the assumption that box is aligned by axis */
-double dist_pb_simplified(Datum p, Datum b)
+double 
+dist_pb_simplified(Datum p, Datum b)
 {
 	Point *point = DatumGetPointP(p);
 	BOX *box = DatumGetBoxP(b);

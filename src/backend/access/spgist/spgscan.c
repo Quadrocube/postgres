@@ -15,14 +15,14 @@
 
 #include "postgres.h"
 
-#include "access/spgist_private.h"
 #include "access/relscan.h"
+#include "access/spgist_private.h"
+#include "access/spgist_proc.h"
 #include "miscadmin.h"
 #include "storage/bufmgr.h"
 #include "utils/datum.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
-#include "access/spgist_proc.h"
 
 typedef void (*storeRes_func) (SpGistScanOpaque so, ItemPointer heapPtr,
 								 Datum leafValue, bool isnull, bool recheck);
@@ -353,7 +353,8 @@ report:
 	return result;
 }
 
-void spgInnerTest(Relation index, IndexScanDesc scan, SpGistSearchItem *item, 
+void 
+spgInnerTest(Relation index, IndexScanDesc scan, SpGistSearchItem *item, 
 		SpGistInnerTuple innerTuple, bool isnull)
 {
 	spgInnerConsistentIn in;
@@ -465,7 +466,8 @@ void spgInnerTest(Relation index, IndexScanDesc scan, SpGistSearchItem *item,
 }
 
 /* A bundle initializer for inner_consistent methods */
-void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan, 
+void 
+inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan, 
 			SpGistSearchItem *item, SpGistInnerTuple innerTuple)
 {
 	SpGistScanOpaque so = scan->opaque;
@@ -485,7 +487,8 @@ void inner_consistent_input_init(spgInnerConsistentIn *in, IndexScanDesc scan,
 }
 
 /* Returns a next item in an (ordered) scan or null if the index is exhausted */
-SpGistSearchItem *getNextQueueItem(SpGistScanOpaque so)
+SpGistSearchItem *
+getNextQueueItem(SpGistScanOpaque so)
 {
 	MemoryContext oldCxt = MemoryContextSwitchTo(so->queueCxt);
 	SpGistSearchItem *item = NULL;
